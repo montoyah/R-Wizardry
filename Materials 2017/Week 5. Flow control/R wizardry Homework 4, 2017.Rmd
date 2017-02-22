@@ -1,0 +1,98 @@
+---
+title: "R wizardry Homework 4 (week 5), 2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+```{r, echo=FALSE, include=FALSE}
+rm(list=ls(all=TRUE))
+
+#setwd("/home/oscar/Dropbox/R wizardry TA/Day 4")
+data <- read.csv("/home/oscar/Dropbox/R wizardry/2017/Datasets/SimDataTrend.csv")
+head(data)
+
+```
+
+
+
+# Nested Looping
+
+
+Description of the new dataset: We have sampled biomass and abundance of a population of organisms through time (the organisms could be anything: bunnies, bacteria, microbes, plants). The populations vary in number of genotypes (i.e., the genetic richness of each population varies from 1 up to 5 genotypes). Each population sampled is subject to either a nutrient enhancement (termed “treatment”) and a control (termed “control”) for each level of genotype richness. The sampling is replicated in a block design (that is to say the experiment has been repeated 10 times). Each block tracks the populations for 120 days. We repeated this exact approach for the year 2013 and again in the year 2014. Visually, the data looks like this:
+
+![Data structure](/home/oscar/Dropbox/R wizardry/2017/2017. Week 5. Flow control/data structure image.jpg)
+
+
+## Question 1 (7 points)   
+Convert the biomass data into an n-dimensional array, with a dimension for each categorical variable with different levels for year, day, block, nutrient, and genotypic richness (there are 3 levels of richness: either 1, 3, or 5). Hint – Make an empty array of appropriately sized dimensions first. Then use nested FOR loops to loop through the data, grabbing the biomass data at the appropriate numeric index to fill the array for when the year equals year y, the day equals day d, the block equals block b, the nutrient treatment equals treatment n, and the genotypic richness equals genotype g.
+
+
+```{r include=FALSE, eval=TRUE}
+
+biomass = array(NA, dim = c(length(unique(data$year)), length(unique(data$day)), length(unique(data$block)), length(unique(data$nutrient)), length(unique(data$geno))))
+dim(biomass)
+
+for(y in seq_along(unique(data$year)))
+  for(d in seq_along(unique(data$day)))
+    for(b in seq_along(unique(data$block)))
+      for(n in seq_along(unique(data$nutrient)))
+        for(g in seq_along(unique(data$geno)))
+        {
+          biomass[y,d,b,n,g] = data$biomass[data$year == unique(data$year)[y] & 
+                                              data$day == unique(data$day)[d] & 
+                                              data$block == unique(data$block)[b] & 
+                                              data$nutrient == unique(data$nutrient)[n] & 
+                                              data$geno == unique(data$geno)[g]]
+        }
+
+biomass
+
+```
+
+Your object "biomass" should have dimensions [`r dim(biomass)`]
+
+
+## Question 2 (3 points) 
+Converting the data frame into an array allows us to make nice contour plots to visualized general patterns in the data. We can more easily do this once we index the array down into a matrix. Make a contour plot (see code below) by indexing the array for the first year, the first block, and the “Treatment” nutrient group (Treatment is the 2nd level of “nutrients”). If you recall, we are “slicing” through the array to pull out a data matrix. Plot how biomass changes over the day of year for each genotypic richness level. We can see then that generally, increased genotypic richness leads to slightly higher biomass. Also, biomass tends to increase as time increases.
+
+Hint: use the "image()" function to plot the matrix.
+
+```{r eval=TRUE}
+
+#temp = day X geno matrix where year == 2013, block == 1, and nutrient == treatment
+
+#For example, create a data called temp that will have the the data of interest
+#temp = biomass[year, -no day-, block, nutrient, -no geno-]
+
+temp = biomass[1, , 1, 2, ] #y,d,b,n,g
+
+#Plot the matrix with the colour representing the value of biomass
+image(temp, xlab = "day", ylab = "geno", x = unique(data$day), y = unique(data$geno))
+
+```
+
+
+Then add:   
+filled.contour(DATA OF INTEREST, xlab = "Day of Year", ylab = "Genotype Richness", 
+  x = UNIQUE LEVELS OF DAY, y = UNIQUE LEVELS OF GENOTYPIC RICHNESS, 
+  color.palette = heat.colors)
+  
+to generate:
+
+```{r eval=TRUE}
+#Similar plot but with smoothing and a nice colour legend
+
+filled.contour(temp, xlab = "Day of Year", ylab = "Genotype Richness", x = unique(data$day), y = unique(data$geno), color.palette= heat.colors)
+
+```
+
+
+
+And rememeber:
+
+
+![](/home/oscar/Dropbox/R wizardry/2017/2017. Week 5. Flow control/Screenshot from 2017-02-08 20:33:36.png)

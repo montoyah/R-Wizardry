@@ -1,0 +1,413 @@
+---
+title: "R wizardry course week 5 (skeleton), 2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+proc.time()
+```
+
+# Week 5 content
+
+5.1 for loops
+5.2 cycle through values
+5.3 inclass problem
+5.4 if statements
+5.5 example
+5.6 debugging loops
+5.7 while and repeat loops
+5.8 Next and break
+5.9 Nested looping
+
+```{r}
+rm(list=ls(all=TRUE))
+
+setwd("/Admin/desktop/R/Datasets/")
+data <- read.csv("compounds_triplicates_long.csv",header=T,stringsAsFactors = FALSE)
+```
+
+## 5.1 for loops
+
+R doesn't care if you write something 1000 times or have it copy it 1000 times
+But the second is a lot easier for you
+
+```{r}
+i <- 2
+i <- i+2
+i <- i+2
+i <- i+2
+i <- i+2
+i <- i+2
+i <- i+2
+i
+
+i <- 2
+for(counter in 1:6)
+{
+  i <- i+2
+}
+i
+```
+
+for loops have two stages
+1. Set a variable to equal the next value in a sequence
+2. Run a set of code with that variable at that value
+3. Repeat
+
+```{r}
+for(variable in seq(1,10,0.5))
+  print(variable)
+
+for(variable in c("As", "you","wish"))
+  print(variable)
+```
+
+R either takes the rest of the line, the next line, or everything within { } as the looped code
+
+```{r}
+i<-1
+for(counter in 1:6) i<- i+2
+i
+
+i<-1
+for(counter in 1:6)
+  i<-i+2
+i
+
+i<-1
+for(counter in 1:6)
+{
+  i<- i+2
+}
+i
+
+i<-1
+for(counter in 1:6){
+  i<- i+2
+}
+i
+```
+
+We can use the variable simply as a tracker to repeat code a given number of times
+For example, we can replicate the rep() function
+
+```{r}
+x <- 1:5
+n <- 10
+
+seq <- x
+for(i in 1:(n-1))
+{
+  seq<-c(seq,x)
+  print(seq)
+}
+length(seq)/5
+
+```
+
+
+## 5.2 cycle through values
+
+The most useful thing to do with a for loop is to cycle through values
+
+```{r}
+colnames(data)
+plot(mean_methane ~ day, col=0, data) #empty plot
+#We can use the variable to select different data each time
+i<-i
+for(i in 1:dim(data)[1])
+{
+  points(mean_methane ~ day, data[i,], col=heat.colors(dim(data)[1])[i],pch=20)
+}
+#methane per day of each individual row
+
+```
+
+## 5.3 inclass problems
+Replicate the tapply() function (you don't need it to have the same formatting)
+
+```{r}
+tapply(data$mean_methane, data$compound, mean, na.rm=TRUE)
+
+compound <- data.frame("compound" = unique(data$compound),"mean_methane" = 0)
+compound
+
+for(i in 1:dim(compound)[1])
+{
+  temp <- compound[i,1]
+  compound[i,2]<-mean(data[data$compound == temp,"mean_methane"],na.rm = TRUE)
+}
+compound
+
+#Alternatively
+#You can use the data directly instead of the length
+compound <- data.frame("compound" = unique(data$compound),"mean_methane" = 0)
+compound
+
+for(i in unique(data$compound))
+{
+  pos <- which(unique(data$compound) == i)
+  compound[pos,2] <- mean(data[data$compound == i, "mean_methane"], na.rm=TRUE)
+}
+compound
+
+tapply(data$mean_methane, data$compound, mean, na.rm=TRUE)
+```
+
+
+## 5.4 if statements
+
+The big advantage of programming is you can have R make decisions
+Allows code to be flexible, dont have to rewrite everything if you change the data
+R makes binary decisions: "if data meets a condition, do this thing or else do this other thing"
+if(conditional argument that leads to one F or T outcome)
+
+```{r}
+i<-1
+if(TRUE) i <- "monkey"
+i
+
+i<-1
+if(FALSE) i <- "elaphant"
+i
+```
+
+R either takes the rest of the line, the next line, or everything within { } as the conditional action
+
+```{r}
+if(TRUE) i <-4
+i
+
+if(TRUE)
+  i<-"monkey"
+i
+
+if(FALSE)
+  i<-5
+i<-6
+i
+
+i<-1
+if(FALSE)
+{
+  i<-6
+  i<-5
+}
+i
+```
+
+if() is useful if we have R make the decision for us
+
+```{r}
+i <- 6
+if(i < 5)
+  i <- 0
+i
+```
+
+We can use the else statement for efficiency if we want an alternative thing to be done only when the first thing is not done else goes after the if() task and runs using the same rules as an if() task
+
+```{r}
+i <- 4
+if(i < 5)
+  i <- 0 else
+    i<- 1
+i
+
+i<-4
+if(i<5){
+  i<-0
+}else{
+  i<-1
+}
+i
+```
+
+For simple tasks, ifelse() puts it all in one function
+Need to use <- instead of =
+
+```{r}
+i<-4
+ifelse(i < 5, a <- 1, a <- 2)
+a
+
+ifelse(i<0, a<-1, a<-2)
+a
+
+#Can also use ifelse() for staggered data selection
+ifelse(letters<"h","hippo",1)
+```
+
+
+## 5.5 example
+Use t-test to look for methane production diffrences between the salinity levels of every 10th day (starting at day 2), excluding the "BRACKISH" salinity.
+
+```{r}
+#subset dataset for every 10th day and exclude brackish
+subdata<- data[data$day%%10==2 & data$salinity != "brackish",]
+result<- data.frame(day=unique(subdata$day),diff=0,p=0)
+head(result)
+for(i in unique(subdata$day))
+{
+  t <- t.test(mean_methane ~ salinity, subdata[subdata$day==i,])
+  result[result$day==i,2]<- as.numeric(diff(t$estimate))
+  result[result$day==i,3]<- t$p.value
+}
+head(result)
+```
+
+Now use an if statement so you don't have to subset your data
+
+```{r}
+#use if to pick every 10th day and use data$salintiy != "brackish" to exclude brackish
+result<- NULL
+for(i in unique(data$day))
+{
+  if(i%%10==2){
+    t <- t.test(mean_methane ~ salinity, data[data$day == i & data$salinity != "brackish",])
+		temp <- data.frame(day = i, diff = as.numeric(diff(t$estimate)), p = t$p.value)
+		result <- rbind(result, temp)
+  }
+}
+head(result)
+```
+
+## 5.6 debugging loops
+
+```{r}
+#Sy.sleep can help you debug your for loops by slowing it down (if combined with a print or plot function)
+count<-0
+for(variable in c("First I was \nafraid","I was petrifried","Kept thinking \nI could never","live without \nyou by my side"))
+{
+  plot(0, col=0)
+  text(1,0,variable,cex=4)
+  Sys.sleep(1)
+  count<-count+1 #this will tell you how many times the loop has happened but you need to set count to zero before the loop
+}
+count
+
+
+#print can help you figure out where you loop is breaking down
+x <- 0
+for(i in 15:30)
+{
+  #print(i)
+  if(data[i,"mean_methane"] > 20) x <- x + 1
+}
+i #you can alway print the variables in your for loop to see the value they reached when it stopped working
+x
+
+i <- 24 #you can also set the variable you are looping with to different value to see what happens when you run lines of codes within your loop
+```
+
+## 5.7 while and repeat loops
+
+```{r}
+x <- 10
+while(x < 10){
+  x <- x + 1
+  print(x)
+}
+
+#Loop wil be ignored if it is not true when r reads the code
+x <- 20
+while(x < 10)
+{
+  x <- x + 1
+  print(x)
+}
+
+#Only checks if the statement is true on each loop
+x <- 1
+while(x < 10){
+  x <- x+1
+  x <- x+1
+  x <- x+1
+  x <- x+1
+  print(x)
+}
+
+#you can press escape to stop the code
+x <- 1
+while(x < 2){
+  print(x)
+Sys.sleep(1)
+}
+
+i<-0
+repeat{
+  i<-i+1
+  print(i)
+  Sys.sleep(1)
+  if(i > 5) break #without this repeat will never stop
+}
+```
+
+## 5.8 Next and break
+
+```{r}
+for(i in 1:10){
+   break
+  print(i)
+}
+i
+
+#Skip a value (iteration) using next
+for(i in 1:10){
+  if(i > 3 & i < 7) next
+  print(i)
+}
+
+#Skipping nonexistant data
+subdata <- data[data$day%% 10==1 | data$day %%10 ==2,]
+for(i in 1:1000){
+  temp <- subdata[subdata$day==i,]
+  if(dim(temp)[1]==0) next
+  #next protects this boxplot from missing values
+  boxplot(mean_methane~compound, temp,
+          main = paste('Day', i, sep = "="),
+          ylim = c(-5, 120))
+}
+```
+
+## 5.9 Nested looping
+
+```{r}
+gene <- "gattaca"
+ngenes <- 10000
+nbasepair <- 15
+genome <- matrix(NA, nrow=ngenes, ncol= nbasepair)
+genes<-NULL
+set.seed(123)
+for(i in 1:ngenes){ #this is looping through all the rows of our matrix
+  for(j in 1:nbasepair){ #this is looping through all the columns
+    genome[i,j] <- sample(c("a","c","g","t"), 1, replace=TRUE, prob=c(1/4,1/4,1/4,1/4))
+  }
+  genes[i]<-paste(genome[i,1:nbasepair],collapse="") #note this is part of the for(i) loop but happens after the for(j) loop is completed
+}
+genes[1:2]
+genome[1:2,]
+
+gene.location <- grep(gene, genes)
+genes[gene.location]
+
+#mixing and matching flow control
+set.seed(789)
+plot(0, xlim= c(0,1000), ylim = c(0,1000), col=0)
+total <- 0
+for(i in 1:8){ #loops through each of our 8 simulated alleles
+  allele <- 500
+  x <- 0
+  while(allele < 1000 & allele > 0){ #runs the simulation while the allele is not at fixation
+    if(x >=1000){ #checks if the allele has lasted for 1000 generations
+      total <- total + 1
+      break #ends the loop when if statement is true
+    }
+    points(allele ~ x, col = i)
+    allele <- allele + rnorm(1, mean=0, sd= 10)
+    x<- x+1
+  }
+}
+total #this is the tally of alleles that have not gone to fixation
+```

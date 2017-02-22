@@ -1,0 +1,244 @@
+---
+title: "R wizardry course week 6, 2017"
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+rm(list=ls(all=T))
+```
+
+
+```{r}
+#setwd("/home/oscar/Dropbox/R wizardry TA")
+data <- read.csv("/home/oscar/Dropbox/R wizardry/2017/Datasets/SimDataTrend.csv")
+```
+
+# Customized functions
+
+Week 6 content:
+
+6.1 General structure of a function
+6.2 Creating a custom function: Standard Error
+6.3 Passing custom functions to other functions: Aggregate
+6.4 Coding a 'robust' custom function: What about NAs?
+6.5 Functions for complex analyses: Mixing FOR loops and FUNCTIONS
+6.6 Looping across complex functions/analyses
+6.7 Plotting the above results
+
+
+## 6.1.1 General structure of a function
+
+```{r}
+help("function")
+```
+
+lm
+FUN <- function(ARGUMENT1 = object1, ARGUMENT2 = object2, ... )
+{
+  ARGUMENT1 () = FIRST THING TO DO
+  ARGUMENT 2 () = SECOND THING TO DO 
+  ... = OPTIONAL ARGUMENTS, means "expect more instructions"
+  
+  return(THE ITEM/SOLUTION/OBJECT/VALUE OF INTEREST)
+}
+
+
+To call and execute the function, type the name of the function and pass the parameters/object of interest to the correspondent arguments. The objects don't need to be preceeded by the name of the argument. However, if you decide not to use the ARGUEMNT name, make sure you you add the objects in the same order you decided to add them when you created the function. For example, FUN(object1, object2) will return a different result than FUN(object2, object1), but FUN(ARGUMENT1 = object1, ARGUMENT2 = object2) and FUN(ARGUMENT2 = object2, ARGUMENT1 = object1) will return the same result.
+
+
+## 6.2 Creating a custom function: Standard Error
+
+By definition, SE is the sd of the sample-mean's divided by the sqrt of the sample size.
+```{r}
+?sqrt
+?sd
+?length
+
+
+```
+
+
+The following two functions are equivalent and will return the same answer:
+
+Option 1
+
+The code below creates a standard error (SE) function that can be used with our dataset.
+```{r}
+SE <- function(x)
+{
+  std_err <- sd(x) / sqrt(length(x))
+  return (std_err)
+}
+
+
+SE()
+
+head(data)
+SE(data$biomass)
+```
+
+Option 2
+
+The code below returns both the SE and the MEAN of mydata
+```{r}
+
+SE_mean <- function(mydata)
+{
+  std_err <- sd(mydata)/sqrt(length(mydata))
+  return(c(std_err, mean(mydata)))
+}
+
+SE_mean(mydata = data$biomass)
+SE(data$biomass)
+sd(data$biomass)/sqrt(length(data$biomass))
+
+
+SE(mydata = data)
+SE(data)
+```
+
+
+## 6.3 Passing custom functions to other functions: Aggregate
+
+```{r}
+?aggregate
+
+aggregate(biomass ~ geno + nutrient, data, SE)
+aggregate(biomass ~ geno + nutrient, data, mean)
+```
+
+
+## 6.4 Coding a 'robust' custom function: What about NAs?
+
+
+Let's introduce missing data into SimData
+
+
+```{r}
+?sample
+
+temp <- data$biomass
+
+set.seed(1)
+temp[sample(1:length(temp), 1000)] <- NA
+
+```
+
+
+Now, run SE on the new SimData with the introduced NAs
+```{r}
+SE(temp)
+```
+
+
+We need to add some argument to handle missing data (NA)
+```{r}
+SE <- function(x, ...)
+{
+  std_err <- sd(x, ...) / sqrt(length(x[!is.na(x)]))
+  return(std_err)
+}
+
+SE(temp, na.rm=TRUE) 
+SE(data$biomass)
+```
+
+
+## 6.5 Functions for complex analyses: Mixing FOR loops and FUNCTIONS
+
+
+Power Analyses
+Help us to determine a sample size required to detect an effect of a given size with a given degree of confidence. 
+
+Let's create Monte Carlo (MCMC) simulation (a Bayesian-based method).
+
+Knowing the difference in mean biomass between tretments and controls, we can compute the probability of observing a value as large as we did, referred to as a p-value.
+
+First, let's take a look at t-tests in R
+```{r}
+t_test_results <- t.test(data$biomass[data$nutrient == "Treatment"],
+                         data$biomass[data$nutrient == "Control"])
+
+str(t_test_results)
+
+t_test_results$p.value
+
+```
+
+
+```{r, engine=}
+?rbind
+?order
+?diff
+
+power <- function(x1, x2, nsamp, draws=1000)
+{
+  boot <- NULL
+  for(i in 1:draws)
+  {
+    treat <- sample(x1, nsamp) #treatments
+    contr <- sample(x2, nsamp) #controls
+    t <- t.test(treat, contr)
+    results <- c(diff(t$estimate), t$p.value) #t estimate = t value
+    boot <- rbind(boot, results)
+  }
+   boot <- boot[order(boot[ , 1]), ]
+   test <- as.vector(c(nsamp,
+                       boot[round(draws * 0.5), 1],
+                       boot[round(draws * 0.5), 2]))
+   return(test)
+  
+}
+
+
+set.seed(10)
+
+treatment_test <- data$biomass[data$nutrient == "Treatment"] 
+control_test <- data$biomass[data$nutrient == "Control"] 
+
+power(treatment_test, control_test, nsamp = 11, draws = 10)
+
+```
+
+
+
+
+## 6.6 Looping across complex functions/analyses
+
+```{r}
+nSim <- c(2, 5, 10, 15, 20, 25, 30, 50, 100, 1000)
+set.seed(20)
+
+results <- NULL
+
+for (i in 1:length(nSim))
+{
+  N <- nSim[i]
+  draws <- 1000
+  treat <- data$biomass[data$nutrient == "Treatment"]
+  contr <- data$biomass[data$nutrient == "Control"]
+  test <- power(treat, contr, N, draws)
+  results <- rbind(results, test)
+}
+
+results
+```
+
+
+
+## 6.7 Plotting the above results
+
+```{r}
+plot(log(results[ , 1]), results[ , 3], xaxt = "n", xlab = "Samples", ylab = "p-value", pch = 20)
+
+axis(1, at = log(nSim), labels = nSim)
+abline(h=0.05, col = "red", lty = 2)
+```
+
+
+
