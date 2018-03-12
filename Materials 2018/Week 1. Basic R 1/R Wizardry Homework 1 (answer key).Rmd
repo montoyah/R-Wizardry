@@ -1,0 +1,103 @@
+---
+title: "R Wizardry Homework 1"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# Homework 1 – The basics of R
+
+Directions – Use the attached RMarkdown document to submit your answers, placing the code inside the chuncks of code and text-based answers outside the chunks. 
+
+There are a total of 10 questions, each question gives you 1 point. Upload the RMarkdown file (the file with the extension ".rmd") to the folder for Homework 1 on Desire2Learn, naming the file with your name and "homework 1" (e.g. "John Smith Homework 1".
+
+
+
+
+## Question 1. 
+Make a variable named X which is equal to 17
+```{r, include=FALSE, echo=FALSE}
+x <- 17
+```
+
+## Question 2.
+Add 28 to the variable you just created and multiply the result by 45. Divide the product by 78. Each new operation will give you a new variable 
+ 
+```{r, include=FALSE, echo=FALSE}
+a <- x + 28
+b <- a * 45
+d <- b / 78
+```
+
+## Question 3. 
+Write the entire code from question #2 as a single line (hint: as you would if you were using a scientific calculator or Excel!)
+
+```{r, include=FALSE, echo=FALSE}
+((x + 28) * 45) / 78
+```
+
+
+## Question 4. 
+Overwrite the 'x' variable with a new value equal to 89
+
+```{r, include=FALSE, echo=FALSE}
+x <- 89
+```
+
+## Question 5. 
+Create a second variable which will be x + 5! (i.e. 5 factorial), and divide your new variable by x
+
+```{r, include=FALSE, echo=FALSE}
+e <- factorial(x)
+f <- e/x
+```
+
+
+## Question 6. 
+Take the squared root of the result from question 5 and store it as a named object.
+
+```{r, include=FALSE, echo=FALSE}
+f <- sqrt(f)
+```
+
+## Question 7. 
+What is the difference between a matrix and a data frame
+
+```{r}
+
+```
+
+
+## Question 8. 
+The dataset below has been stored as a matrix (see rmd file). However, the data type of some of the elements have lost their original characteristics. Use the functions mode(), str() and class() to inquire about the dataset's properties.
+
+What data structure (e.g. list, data frame, array, etc.) would you use instead to store the dataset below, and why?
+
+```{r , include=FALSE}
+
+peter_piper <- matrix(c("Peter", 5, "Piper", 8.5, "couldn't", "find", 10, "peppers"), nrow = 2, ncol = 4)
+
+```
+
+## Question 9. 
+Take the vectors below and create a data frame called "weather" (see rmd file). Did the objects and elements preserve their original data types (i.e. still being character or numeric?). Use the functions mode(), str() and class() to inquire about the dataset's properties. Any differences compared to matrix created in question #8?
+
+```{r, include=FALSE}
+
+day <- 1:10
+
+min_temp <- c(50.7,52.8,48.6,53.0,49.9,47.9,54.1,47.6,43.6,45.5)
+
+max_temp <- c(59.5,55.7,57.3,71.5,69.8,68.8,67.5,66.0,66.1,61.7)
+
+sky <- c("cloudy", "clear", "cloudy", "clear", "cloudy", "clear", "cloudy", "clear", "cloudy", "clear")
+
+
+```
+
+
+## Question 10. 
+R is an object-oriented programming language. Briefly define what an object-oriented programming language is.

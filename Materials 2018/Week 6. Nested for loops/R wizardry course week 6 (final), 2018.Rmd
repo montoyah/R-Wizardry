@@ -1,0 +1,317 @@
+---
+title: "R wizardry course week 6 (skeleton), 2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+proc.time()
+```
+
+# Week 6 content
+
+6.1 mixing different flow controls
+6.2 in class problem
+6.3 nested looping
+6.4 step-by-step
+6.5 have fun!
+6.6 diagnostics
+6.7 optimizing
+
+```{r}
+rm(list=ls(all=TRUE))
+
+#setwd("/Admin/desktop/R/Datasets/")
+data <- read.csv("/home/oscar/MEGAsync/R Wizardry/Materials 2018/Datasets/compounds_stats.csv",
+                 header=T, stringsAsFactors = FALSE)
+```
+
+## 6.1 mixing different flow controls
+
+```{r}
+set.seed(789)
+plot(0, xlim= c(0,1000), ylim = c(0,1000), col=0)
+total <- 0
+
+for(i in 1:8){ #loops through each of our 8 simulated alleles
+  allele <- 500
+  x <- 0
+  while(allele < 1000 & allele > 0){ #runs the simulation while the allele is not at fixation
+    if(x >= 1000){ #checks if the allele has lasted for 1000 generations
+      total <- total + 1
+      break #ends the while loop when if statement is true
+    }
+    points(allele ~ x, col = i)
+    allele <- allele + rnorm(1, mean=0, sd= 10)
+    x<- x+1
+  }
+}
+
+total #this is the tally of alleles that have not lost or fixed
+```
+
+
+## 6.2 inclass problem
+Use t-test to look for methane production diffrences between the salinity levels of every 10th day (starting at day 2), excluding the "BRACKISH" salinity.
+
+```{r}
+#subset dataset for every 10th day and exclude brackish
+subdata<- data[data$day %% 10 == 2 & data$salinity != "brackish", ]
+result<- data.frame(day=unique(subdata$day), diff=0, p=0)
+head(result)
+
+for(i in unique(subdata$day)){
+  t <- t.test(methane_mean ~ salinity, subdata[subdata$day==i,])
+  result[result$day==i,2]<- diff(t$estimate)
+  result[result$day==i,3]<- t$p.value
+}
+
+head(result)
+```
+
+Now use an if statement so you don't have to subset your data
+
+```{r}
+#use if to pick every 10th day and use data$salintiy != "brackish" to exclude brackish
+result<- NULL
+
+for(i in unique(data$day)){
+  #if(i %% 10 != 2) next { # same as next line
+  if(i %% 10 == 2) {
+    t <- t.test(methane_mean ~ salinity, data[data$day == i & data$salinity != "brackish",])
+		temp <- data.frame(day = i, diff = as.numeric(diff(t$estimate)), p = t$p.value)
+		result <- rbind(result, temp)
+  }
+  
+}
+
+head(result)
+```
+
+## 6.3 nested looping
+
+```{r}
+gene <- "gattaca"
+ngenes <- 10000
+nbasepair <- 15
+genome <- matrix(NA, nrow=ngenes, ncol= nbasepair)
+genes <- NULL
+set.seed(123)
+
+for(i in 1:ngenes){ #this is looping through all the rows of our matrix
+  for(j in 1:nbasepair){ #this is looping through all the columns
+    genome[i,j] <- sample(c("a","c","g","t"), 1, replace=TRUE, prob=c(1/4,1/4,1/4,1/4))
+  }
+  genes[i]<-paste(genome[i,1:nbasepair],collapse="") #note this is part of the for(i) loop but happens after the for(j) loop is completed
+}
+
+genes[1:2]
+genome[1:2,]
+
+gene.location <- grep(gene, genes)
+genes[gene.location]
+```
+
+
+## 6.4 step-by-step
+I want to create a nested loop that subset the data by salinity and compound. It then creates a scatter plot for mean methane by day for each unique combination of salinity and compound.
+```{r}
+subdata <- data[!is.na(data$methane_mean),]
+head(subdata)
+for(s in unique(subdata$salinity)){
+  for(c in unique(subdata$compound)){
+    if(length(subdata$methane_mean[subdata$salinity == s & subdata$compound == c]) <1) next
+    plot(methane_mean ~ day, 
+         data = subdata[subdata$salinity == s & subdata$compound == c,], 
+         main = paste(s,c))
+  }
+}
+```
+
+
+## 6.5 have fun!
+Create a nested for loop outputs a data frame called 'words'. The first column is called 'number' a stores the row number added to itself.  The second column is called 'word' and stores every unique 2 letter combination of the alphabet (order matters).
+```{r}
+words <- data.frame(1:length(letters)^2); colnames(words) <- "number"
+index <- 0
+for(a in letters)
+  for(b in letters){
+    index <- index + 1
+    words[index, "number"] <- index*2
+    words[index, "word"] <- paste(a,b,sep="")
+  }
+head(words)
+```
+
+
+## 6.6 diagnostics
+```{r}
+#Testing your code
+?system.time() #This will tel you how long the code inside ran for
+
+system.time( #add every number from 1 to a million to itself
+  for(i in 1:1000000) i+i 
+)
+
+#More advance line by line breakdown
+#Rprof("profile.out", line.profiling = TRUE)
+#eval(parse(file = "nameofRscript.R", keep.source=TRUE))
+#Rprof(NULL)
+
+summaryRprof("profile.out", lines = "show")
+#self = the function
+#total = the function and all functions called by that function
+#time = how many much time it took
+#pct = what percent this is of the overall time
+```
+
+## 6.7 optimization
+This isn't necessary if you have a small data set (you can spend more time optimizing then you save).  But this can be crucially important if you have a large data set (the difference between the code finishing or not).
+
+Note that these tips will in general speed up code but results depend on the structure of the data you are working with.
+```{r}
+#let's create a large data set
+long_data <- data
+for(i in 1:399) long_data <- rbind(long_data,data)
+dim(long_data) #now 400 times it's original length
+
+#here is a slow for loop that we will optimize
+methane_threshold <- NULL
+system.time(
+  for(i in 1:length(long_data$methane_mean)){
+    if(!is.na(long_data[i,"methane_mean"]) & long_data[i,"methane_mean"] > 10){
+      methane_threshold[i] <- TRUE
+      }else{
+        methane_threshold[i] <- FALSE
+      }
+  }
+)
+
+#Vectorize and prealocate slots
+methane_threshold <- rep(NA,length(long_data$methane_mean))
+system.time(
+  for(i in 1:length(long_data$methane_mean)){
+    if(!is.na(long_data[i,"methane_mean"]) && long_data[i,"methane_mean"] > 10){
+      methane_threshold[i] <- TRUE
+      }else{
+        methane_threshold[i] <- FALSE
+      }
+  }
+)
+
+#loop through only what's necessary
+sublong_data <- long_data[!is.na(long_data$methane_mean),]
+methane_threshold <- NULL
+system.time(
+  for(i in 1:length(sublong_data$methane_mean)){
+    if(!is.na(sublong_data[i,"methane_mean"]) & sublong_data[i,"methane_mean"] > 10){
+      methane_threshold[i] <- TRUE
+      }else{
+        methane_threshold[i] <- FALSE
+      }
+  }
+)
+
+#if we can't subset we can at least avoid unneccessary logic statements
+#&& or || with if() (For non-vectors logic statements)
+#Only goes to second part of logic statment if it needs too
+methane_threshold <- NULL
+system.time(
+  for(i in 1:length(long_data$methane_mean)){
+    if(!is.na(long_data[i,"methane_mean"]) && long_data[i,"methane_mean"] > 10){
+      methane_threshold[i] <- TRUE
+      }else{
+        methane_threshold[i] <- FALSE
+      }
+  }
+)
+
+#Avoid indexing data frames
+methane_threshold <- NULL
+long_vector <- long_data$methane_mean
+system.time(
+  for(i in 1:length(long_vector)){
+    if(!is.na(long_vector[i]) & long_vector[i] > 10){
+      methane_threshold[i] <- TRUE
+      }else{
+        methane_threshold[i] <- FALSE
+      }
+  }
+)
+
+#Precalulate
+methane_threshold <- NULL
+methane_TF <- !is.na(long_data[,"methane_mean"]) & long_data[,"methane_mean"] > 10
+system.time(
+  for(i in 1:length(long_data$methane_mean)){
+    if(methane_TF[i]){
+      methane_threshold[i] <- TRUE
+      }else{
+        methane_threshold[i] <- FALSE
+      }
+  }
+)
+
+#combine all of this
+long_vector <- long_data$methane_mean
+methane_threshold <- rep(NA,length(long_vector))
+methane_TF <- long_vector > 10
+system.time(
+  for(i in 1:length(long_vector)){
+    if(!is.na(long_vector[i]) && long_vector[i]){
+      methane_threshold[i] <- TRUE
+      }else{
+        methane_threshold[i] <- FALSE
+      }
+  }
+)
+
+#or... just avoid loops where possible
+rm(methane_threshold)
+system.time(methane_threshold <- ifelse(!is.na(long_data$methane_mean) & long_data$methane_mean > 10, TRUE, FALSE))
+
+
+#Other cases that don't work on our current long data set so let's build another
+long_words <- data.frame(1:17576); colnames(long_words) <- "number"
+index <- 0
+for(a in letters)
+  for(b in letters)
+    for(c in letters){
+      index <- index + 1
+      long_words[index, "word"] <- paste(a,b,c,sep="")
+    }
+
+#which(): use when subsetting data with [,]
+results <- NULL
+system.time(
+for(i in long_words$word){
+  position <- long_words$word == i
+  results[position] <- long_words$number[position]
+}
+)
+
+results <- NULL
+system.time(
+for(i in long_words$word){
+  position <- which(long_words$word == i)
+  results[position] <- long_words$number[position]
+}
+)
+
+#Avoid regular expressions in grep based function if looking for an exact match
+system.time(
+for(i in long_words$word){
+  grep(i,long_words$word)
+}
+)
+
+system.time(
+for(i in long_words$word){
+  grep(i,long_words$word, fixed = TRUE) #Fixed = only an exact match
+}
+)
+
+#Avoid slow functions
+#rowSums colSums rowMeans colMeans instead of sum() and mean()
+#anyNA() instead of any(is.na())
+```

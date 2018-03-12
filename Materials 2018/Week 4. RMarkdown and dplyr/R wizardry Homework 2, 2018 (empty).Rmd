@@ -1,0 +1,65 @@
+---
+title: "R wizardry Homework 2, 2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message= FALSE)
+```
+
+
+```{r, echo=FALSE, include=FALSE}
+rm(list=ls(all=TRUE))
+
+
+```
+
+
+# Question 1a (1 point) 
+Four volunteers assited Willy Wonka and Chuck Norris with the methane measurements: “Tom”, “Jerry”, “Sylvester”, and “Tweety” alternated sampling each methane observation in the “compounds_stats" dataset. Create a new data column that reflects this. 
+
+```{r, echo=FALSE, include=TRUE}
+
+
+```
+
+
+# Question 1b (3 points)
+Upon reviewing your notes from this experiment, you discover that the volunteer “Tom” was confused about the procedure measuring all brackish and saline experimental groups on day 10, 86, and 116. Using 1 line of code, change the methane and standard deviation data for these measurements to NA. Then proceed to chastise Tom.
+
+```{r, echo=FALSE, include=TRUE}
+
+
+```
+
+
+
+# Question 2 (2 points)
+You have collected data for the methane production for each day for multiple compounds, treatment types, and saline treatments. Calculate and create two new columns in your dataset for the upper and lower 95% confidence intervals for each sample. The 95% confidence intervals are the methane production +/- 1.96 times the standard deviation for that sample.
+
+```{r, echo=FALSE, include=TRUE}
+
+
+
+```
+
+
+# Question 3 (3 points)
+Create a boxplot showing the uncertainty in mean 
+methane production per day for the hexane and benzene compounds (i.e., 
+combine the methane production for both compounds).
+
+```{r, echo=FALSE, include=TRUE}
+
+
+```
+
+
+# Question 4 (1 point)
+Using R code, find the indices for where in the data methane production was greater than 3.5 but the standard deviation was less than or equal to 2 on day 1. Whoever ran the unamendend saline water part of this experiment did so perfectly that will merit coauthorship, but which one of your volunteers deserves this honor?
+
+```{r, echo=FALSE, include=TRUE}
+
+
+```
+

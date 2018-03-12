@@ -1,0 +1,336 @@
+---
+title: "R wizardry course Week 4, 2018"
+output: pdf_document
+---
+
+```{r, message=FALSE, include=FALSE}
+library(knitr)
+opts_chunk$set(echo = TRUE, include = TRUE, eval = TRUE, collapse = TRUE, results = "hide")
+
+options("readr.num_columns" = 0)
+
+```
+
+<!--
+```{r}
+library("dplyr")
+library("tidyr")
+library("readr")
+```
+
+## Load our demo dataset
+```{r, eval=FALSE}
+pa = read_csv("../datasets/pa_phenotype_small.csv")
+```
+
+What does it look like?
+```{r, eval=FALSE}
+glimpse(pa)
+```
+
+## Tidy
+
+Let's tidy it up a bit. The `gather` function is what we use to gather up multiple columns (observations) and put them into one column.
+
+Here we need to decide which of our columns contain the values we're measuring.
+```{r, eval=FALSE}
+pa_tidy = pa %>% 
+	gather(Phenotype, Measurement, -Strain_ID, -Event_num, -Clinical_Status, -Date_of_Isolation)
+```
+
+Spread is the reverse of gather
+```{r, eval=FALSE}
+pa_tidy %>% spread(Phenotype, Measurement)
+```
+-->
+
+#Week 4
+
+4.1 Finish week 3 materials (create an R project, random numbers and strings). Please remit to the week 3 rmd file, section 3.6 and on.    
+4.2 Brief intro to RMarkdown
+4.3 Dplyr and its verbs  
+
+
+## 4.2 Brief intro to RMarkdown
+4.2.1. Create an rmd file from scratch  
+4.2.2. Set up chunck  
+4.2.3. Set up inside individual chuncks 
+4.2.4. Rendering to PDF, doc, html, slideshow 
+
+
+## 4.3 Dplyr
+
+Incorporates the use of UNIX's pipes (%>%) in R so you build "pipelines" of code.
+
+### Verbs
+
+```{r}
+library(dplyr)
+compounds_stats <- read.csv("/home/oscar/MEGAsync/R Wizardry/Materials 2018/Week 3/compounds_stats.csv")
+
+str(compounds_stats)
+
+#View(compounds_stats)
+```
+
+### 4.3.1 Summarise
+
+The `summarise` function is used to create statistical summaries of your data.  Most of the time it is used in combination with `group_by`.  Let's see how this works.
+
+Let's find the variance among methane formation grouped by salinity: 
+```{r}
+library(dplyr)
+
+?summarise
+
+compounds_stats %>% 
+	group_by(compound) %>% 
+	summarise(var = var(methane_mean, na.rm = TRUE))
+
+
+#Dplyr is very inclusive by taking into account the English-Australian vs. North American spelling of several words, for example.
+
+summarize
+```
+
+
+What about other stats?
+```{r}
+compounds_stats %>% 
+	group_by(salinity, compound, day) %>% 
+	summarize(mean = mean(methane_mean, na.rm = TRUE),
+	          median = median(methane_mean, na.rm = TRUE),
+						max = max(methane_mean, na.rm = TRUE),
+						min = min(methane_mean, na.rm = TRUE))
+
+```
+
+
+Adding calculations inside summarise, though, will bring errors to the code. Let's try to calculate the standard error of the mean:
+```{r, message=FALSE, eval=FALSE}
+#First, make sure the calculation works by itself:
+compounds_stats$methane_sd/sqrt(length(compounds_stats$methane_mean))
+                              
+#Now, include the code (note the use of periods to indicate the dataset):
+compounds_stats %>%  group_by(salinity, compound, day) %>% 
+  summarise(se = compounds_stats$methane_sd/sqrt(length(compounds_stats$methane_mean)))
+
+```
+
+
+### 4.3.2 Mutate
+
+Mutate is similar to summarise, however, it "mutates" a column instead of summarising it.  Summarise takes a bunch of values and produces one value from those.  Mutate returns a transformed vector that is the same size as the original. Usually we're not grouping but you can if needed.
+
+Let's use mutate here to transform one of our variables to log scale. A new column will be added to the object "compounds" without overwritting it:
+```{r}
+#
+log10_compounds <- compounds_stats %>% 
+  mutate(methane_mean_log10 = log10(methane_mean))
+
+#Notice warning
+```
+
+Look at the transformed variable.  What's the problem here?
+```{r}
+log10_compounds$methane_mean_log10
+
+#NaN (not a number, or the result of 0 divided by 0, or the log10 of a negative number) versus NA (not available)
+```
+
+```{r}
+log10_compounds2 <- compounds_stats %>% 
+  mutate(methane_mean_log10 = log10(methane_mean + 10))
+
+#Another option would be selecting data greater than 0 but you'll lose data...
+log10_compounds3 <- compounds_stats %>% mutate(methane_mean_log10 = log10(methane_mean > 0))
+```
+
+Alternative way to do the same thing, although note that this modifies our dataframe in-place instead of returning a copy.
+
+```{r}
+compounds_stats$log10_methane_mean <- log10(compounds_stats$methane_mean + 10) %>% round(1)
+compounds_stats$log10_methane_mean
+```
+
+Transmute does the same as mutate but returns only the mutated column
+```{r}
+compounds_stats %>% transmute(log10_methane_mean = log10(compounds_stats$methane_mean + 10)) %>% head(20)
+```
+
+
+### 4.3.3 Filter
+
+`filter` returns only rows matching a particular condition
+```{r, eval=FALSE}
+compounds_stats %>% filter(compound == "hexane") %>% View() 
+
+#Numbers can be used with or without quotation marks
+compounds_stats %>% filter(day > 197)
+compounds_stats %>% filter(day < "197") 
+
+#Can include several 
+compounds_stats %>% filter(salinity == "brackish" | salinity == "saline", methane_mean >= 20)
+
+#or simply exlude "fresh" (a bit of less typing...)
+
+compounds_stats %>% filter(salinity != "fresh", 
+                           methane_mean >= 20)
+```
+
+In base R:
+```{r}
+compounds_stats[compounds_stats$salinity != "fresh" & compounds_stats$methane_mean >= 20, ]
+
+#Get rid of <NA> cells
+na.omit(compounds_stats[compounds_stats$salinity != "fresh" & compounds_stats$methane_mean >= 20, ]) 
+
+```
+
+
+### 4.3.4 Select
+
+`select` gives us the columns we want. Use unqouted column names.
+
+```{r}
+compounds_stats %>% select(day, methane_sd, group)
+```
+
+Columns are returned in the order we list them
+```{r}
+compounds_stats %>% select(day, methane_sd, salinity, group, log10_methane_mean)
+```
+
+Dplyr provides helper functions for selecting columns. `?select_helpers`
+```{r}
+compounds_stats %>% select(everything())
+compounds_stats %>% select(starts_with("s"))
+compounds_stats %>% select(ends_with("d"))
+compounds_stats %>% select(contains("LiNi")) #Is not case sensitive
+
+# Move a column to the front
+compounds_stats %>% select(log10_methane_mean, everything()) %>% head(10)
+
+```
+
+### 4.3..5 Other "verbs"
+
+`slice` gives us row indexing
+```{r}
+compounds_stats %>% 
+	select(day, compound, salinity) %>% 
+	slice(1:10)
+
+compounds_stats %>% 
+	select(day, compound, salinity) %>% .[1:10, ] #The period is required here!
+
+
+```
+
+`arrange` orders the dataframe by a variable
+```{r}
+compounds_stats %>% arrange(salinity) %>%  head(20)
+compounds_stats %>% arrange(desc(day), salinity) %>% head(55)
+```
+
+`distinct` gives us only the unique rows
+```{r}
+compounds_stats %>% distinct(day) #Like unique()
+compounds_stats %>% distinct(salinity)
+```
+
+`count` and `tally` count occurences
+```{r}
+compounds_stats %>% count(day) #Number of observations per day
+compounds_stats %>% group_by(salinity, day) %>% tally() #Observations per salinity per day
+```
+
+`sample_n` and `sample_frac` (percentage) allow us to randomly sample rows
+```{r}
+set.seed(4)
+compounds_stats %>% sample_n(5)
+compounds_stats %>% sample_frac(0.2)
+```
+
+
+## Putting it together
+
+Problem 1.
+
+What are the maxima values in decreasing order, based on compound and salinity, for the mean of methane for days 102, 272, and 72?
+```{r}
+
+compounds_stats %>% 
+	filter(day == 102 | day == 272 | day == 72) %>%
+	group_by(compound, salinity) %>% 
+	summarise(max = max(methane_mean, na.rm = TRUE)) %>% 
+	arrange(desc(max))
+
+#or
+
+compounds_stats %>% 
+	filter(day %in% c("102", "272", "72")) %>% #shorter than typing "day == 102 | ...."
+	group_by(compound, salinity) %>% 
+	summarise(max = max(methane_mean, na.rm = TRUE)) %>% 
+	arrange(desc(max))
+```
+
+
+Mean center (scale) the mean of methane.
+```{r}
+compounds_stats %>% 
+	group_by(compound) %>% 
+	mutate(centered = scale(methane_mean)) %>% 
+  slice(15:30)  %>% select(centered) #Times standard deviations each observation is above (positive) or below (negative) mean.
+
+#Scale = (x - mean(x)) / sd(x) , or simply the reminder divided by the sd. Allows standarization of the data, aka "Z-scores".
+```
+
+
+Using only the treatment and unamended groups, create a new column called "transformation" that is the standarized values for the brackish observations only; values for any other salinity on that new column most be NAs. Addtionally, create a column called "pos_or_neg" that will have a negative or positive sign. If a value in column "transformation" is less than than 0 (zero), that value will have a "-" (negative) sign in the column "pos_or_neg", and viceversa for values more than 0. Preserve only numeric values (i.e. get rid of NAs).
+
+
+```{r}
+?scale
+
+compounds_stats %>%
+  filter(group %in% c("treatment", "unamended")) %>%
+	mutate(transformation = if_else(salinity == "brackish", scale(methane_mean, scale=FALSE), NA_real_)) %>% #only transform brackish
+	mutate(pos_or_neg = if_else(sign(transformation) < 0, "-", "+")) %>% na.omit()
+```
+
+
+On next week (Week 5):
+
+For week 5, using loops and match/paste/grep to sequence genome type data
+```{r}
+gene <- "gattaca"
+ngenes <- 10000
+nbasepairs <- 15
+genome <- matrix(NA, nrow=ngenes, ncol=nbasepairs)
+genes <- NULL
+for(i in 1:ngenes)
+{
+  for(j in 1:nbasepairs)
+  {
+    genome[i,j] <- sample(letters[c(1,3,7,20)],1,
+                          replace=TRUE,
+                          prob=c(1/4,1/4,1/4,1/4))
+  }
+  genes[i]<-paste(genome[i,1:nbasepairs],collapse='')
+}
+
+
+gene.location <- grep(gene,genes)
+genes[gene.location]
+gene.presence <- NULL
+for(i in 1:ngenes)
+{
+  gene.presence[i] <- grepl(gene,genes[i])
+}
+gene.presence <- as.numeric(gene.presence)
+genes[gene.presence==1]
+```
+
+
+

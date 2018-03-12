@@ -1,0 +1,776 @@
+---
+title: "R wizardry course Week 3, 2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+proc.time()
+```
+
+
+
+
+# Week 3 content
+
+3.1 How to create projects in R
+3.2. Arithmetic operators
+3.3 Subsetting data with predefined functions from base R and dplyr (package)
+3.4 Calculations based on another column
+3.5 Brief intro to graphs using R base plotting functions
+3.6 Create and export a summary table
+3.7 Selecting data based on another column
+3.8 Finding data based on its value
+3.9 Random numbers and selecting random data
+3.10 Strings
+
+
+
+## Before starting:
+* Googling and solving R errors
+
+* Reminder about office hours dinamyc: send your question in advance and show us you have searched the aswer by yourself. We're not being mean, this is simply the way how learning programming works...
+
+* Mid term feedback
+
+* Some examples of final projects from previous years
+
+* Upload homework 1 to D2L.
+
+* Disccuss homeworks solutions.
+
+* During this lecture we'll build the dataset to be used during the plotting lectures. 
+
+
+
+## 3.1 How to create projects in R
+
+File > New Project. This can be linked to an existent folder or to a new one.
+
+
+## 3.2 Arithmetic operators
+
+```{r}
+
+
+```
+
+
+To find "types" of numbers, %/% and %% are handy
+
+```{r}
+
+# %% returns the remainder
+
+
+# %/% returns the quotient
+
+
+#Even numbers
+  # Logic
+
+  # Numeric
+
+#numbers divisible by 5 **OR** 6
+
+
+# Numbers that are not divisible by 4
+
+
+```
+
+
+
+Can also use brackets for more complicated selections
+
+```{r}
+
+
+
+```
+
+
+### Problem 1
+Use logical operators to simultaneously find the odd numbers between -50 and 0 (inclusive) and the even numbers between 0 and 50 (inclusive)
+
+```{r}
+
+
+
+```
+
+
+
+##Extra: Loading sessions and rds objects from previous R sessions
+
+
+Load the long-format "compounds" (tidy.compounds) dataset created during week 2 (the compressed file with the extension ".rds").
+
+```{r}
+#Before reading the format, ask where in the directory you're in:
+
+
+#If not in the course's folder, set properly the working directory:
+
+     #To make sure that the working directory was corectly set. Now, anything we saved by default in the current directory (getwd())
+
+#Let's see what's in this directory (or folder)
+
+
+# Load "compounds.csv" dataset from week 2 folder. As the dataset was saved in the folder week 2 (not the current working directory, which is week 3), I'll read the file in by specifung the full path to the compounds.rds object:
+
+
+#To read the RDS file
+
+```
+
+
+We can also write and read text files into R (csv, txt, tsv, etc.). To write tidy.compounds as a comma separated value (csv):
+```{r}
+
+# After writting a file, consider commenting out that line
+
+
+
+#To read the csv file:
+
+
+  
+
+
+
+```
+
+
+## Subsetting data with predefined functions from base R and dplyr (package)
+Can use subset() to split the data based on some logical argument contained within the dataset. For example, let's only look at data from the first half of the experiment (before day 200)
+
+```{r}
+
+#Option 1
+
+
+
+#Option 2
+
+
+
+# alternatively,
+
+
+```
+
+
+Adding a column of NEW DATA to an existing dataset
+
+```{r}
+
+
+
+
+# Alternatively could do that more robustly
+
+
+
+```
+
+
+
+## Missing data and NA's
+
+NA represents an empty slot and are also produced when invalid math is attempted. In addition to TRUE and FALSE, NA is another type of logical variable
+
+```{r}
+
+
+
+```
+
+
+Unfortunately, we often have to deal with missing data so lets throw some in
+```{r}
+
+
+
+```
+
+Having NA messes up a lot of functions
+```{r}
+
+
+
+
+```
+
+
+Often there are built in ways to ignore them most common functions have a parameter such as na.rm, na.omit, na.exclude, etc...
+```{r}
+
+
+```
+
+But we can use logic arguments to ignore NAs, e.g. is.na()
+```{r}
+
+        #Column-bind Returns 1 (TRUE) or 0 (FALSE)
+
+# Why are we getting 0 and 1 in column 2 if we were expecting logical (TRUE or FALSE) data?
+# Becuase cbind() creates matrices by default!
+
+        #data.frame Returns TRUE or FALSE
+
+```
+
+
+### Problem 2:
+Subset the dataset compounds according based on
+
+Based on the variable "compound", select only the data corresponding to methane observations in benzene-amended incubations. Select only those observations that have actual numeric vaues, then calculate its mean.
+
+```{r}
+
+
+
+
+
+# Tried to get this to work to select only benzene and only no NAs in methane, not working yet.
+#compounds[compounds$compound == "benzene" | !is.na(compounds[ ,7]) , ]
+
+
+#First we ask about NAs in column 7, then we subset the dataset based on the numeric results of the NA evaluation. That's why column 7 is called twice in the code below
+
+
+#Let's analyze the answer. The inner piece of code, takes all data that is not NA:
+
+
+#The external part of the code subsets the data to get all rows (conditioned as "no NAs" by the inner code), and column 6:
+
+
+#The most exterior code is simply the mean() functon.
+
+
+```
+
+
+
+
+## 3.4 Calculations based on another column
+
+```{r}
+
+```
+
+
+"tapply()" applys a function to one column based on the groups found in another column
+```{r}
+
+
+# Mean of methane based on salinity or group factors
+
+
+
+
+```
+
+
+
+Aggregate is the general form, allowing you to group by more than one column.
+
+```{r}
+
+
+
+
+#A disadvantage of "aggregate()" is that you have to rename the columns
+
+
+
+
+
+
+```
+
+
+ALTERNATIVELY, this form keeps the names
+
+```{r}
+
+
+
+
+```
+
+
+A third way to use aggregate. Let's calculate the mean and standard deviation in the methane reads by day.
+
+```{r}
+
+
+
+
+
+
+```
+
+
+
+### Problem 3
+
+At this point there are two datasets that only differ in one column: one contains means and the other the standar deviations. Make a single dataset called "compouds_stats"" with no repeated varialbles out the two, and rename the columns as "compound", "salinity", "group", "day", "staff", "mean_methane", and "sd_methane".
+
+```{r}
+
+
+
+
+
+
+```
+
+
+Let's say you wanted to quickly calculate your sample size for each categorical factor of compound and group. How would we do that in such a way that R is not counting the NAs?
+
+There are three ways:
+
+```{r}
+
+
+
+
+
+
+
+```
+
+
+## 3.5 Brief intro to graphs using R base plotting functions
+Although during the course we won't use the basic R plotting that much as we'll focus on the ggplot2 package, it's good to understand the very basics.
+
+
+```{r}
+# Change this file name to somwthing other than triplicates long
+
+#read the compounds_stats saved file
+#compounds_stats <- read.csv("/home/oscar/Dropbox/R wizardry/2017/Datasets/compounds_triplicates_long.csv")
+
+
+
+
+```
+
+
+Here is a variety of ways to plot box-and-whisker plots in R
+
+```{r}
+
+
+
+
+
+
+
+```
+
+
+## 3.6 Create and export a summary table
+
+```{r}
+
+
+
+
+
+```
+
+
+```{r}
+
+#Funtion to check if the name you want to use in your new dataset is already taken. This will prevent you from overwritting an existent object by mistake:
+
+#If we don't get a warning, it means there are no objects with the name "Methane medians.csv"
+
+#Now, let's write a file with the name "Methane medians.csv"
+
+
+
+
+#As long as you have a file with the name "Methane medians.csv" in your set directory, you'll get the warning. If you delete the file from your folder, the warning won't show up anymore.
+
+```
+
+
+## 3.7 Selecting data based on another column
+
+We have been selecting data based on itself. We can also select data based on other data.
+
+We can find the odd letters
+```{r}
+
+
+
+```
+
+We can select the data collected on day 1
+```{r}
+
+
+```
+
+
+We can select the data collected on day 1 and day 10
+```{r}
+
+
+```
+
+
+We can select based on 2 or more data types
+```{r}
+
+
+```
+
+
+We can store this subsetted data into a new variable
+```{r}
+
+
+
+
+```
+
+
+## 3.8 Finding data based on its value
+
+
+```{r}
+
+
+
+
+#Get the row number containing the highest methane read
+
+
+
+#Get the entire info of row containing the highest methane read
+
+
+```
+
+
+## 3.9 Random numbers and selecting random data
+
+```{r}
+?runif
+?rnorm
+?rgamma
+?rpois
+?rnbinom
+?rbinom
+?sample
+
+
+
+
+
+#Set the seed to create reproducible simulations.
+
+
+
+#compounds_stats <- read.csv("/home/oscar/Dropbox/R wizardry/2017/Datasets/compounds_triplicates_long.csv")
+
+
+
+                           #Min and max are the lower and upper limits of the distribution
+
+
+
+
+```
+
+
+## 3.10 Strings
+
+```{r}
+
+?substring()
+?strsplit()
+?paste()
+?sub()
+?gsub()
+?grep()
+?sapply()
+?match()
+?unique
+```
+
+### 3.10.1 Logical operators on strings
+```{r}
+
+?as.integer
+?c
+?"["
+?letters
+
+
+
+
+# R is smart (most of the time), for logical operators it ranks character sequences alpha-numerically
+
+```
+
+
+### 3.10.2 Combining strings
+```{r}
+
+?paste
+
+#Use the paste function to combine multiple vectors of character data into a single string
+
+
+
+#Can change the seperation using the sep parameter
+
+
+
+
+# can combine multiple objects from a single vector into a single string
+
+
+
+#Can combine any one-celled variable
+
+
+
+#If you have multi-celled variables, you will create multiple strings
+
+
+```
+
+
+### 3.10.3 Seperating strings
+```{r}
+
+?substring
+?nchar
+?strsplit
+?sub
+
+#substring (aka substr) and strsplit can seperate strings
+
+#substring grabs the characters between two points in the string
+
+
+
+   #The last element is "9"
+
+
+#nchar tells you how long the string is
+
+
+
+#strsplit seperates the string into fragments
+#It makes breaks when it finds the string you want within the larger string
+
+
+
+#The string you are breaking on is not included in the output
+
+
+
+#strsplit puts its output inside of a list (since the arrays in the list can be of different sizes)
+#We get pull the relevant vector/array out of a list using [[NUMBER]]
+
+
+
+
+#We can use sapply if our list has multiple slots and each array is the same size
+
+
+
+#The ".*X" syntax is a regular expression that is recognizable to perl and other languages. It is matching the X argument after any given string, in this case it is matching on the 
+#colon (:) and splitting the string and ignoring everything prior to the colon
+
+
+
+
+# Try a value of 1, and a value of 2 here
+
+
+
+# Why does the sapply function work??? Because the command "[" is a command to R to extract information specific to lists and the function 'strsplit' creates an object formatted as a list
+
+
+
+
+```
+
+### 3.10.4 Managing strings
+
+```{r}
+
+?"[["
+?substr
+?substring
+
+
+
+## ^^ Try different values instead of 4, such as 3, 5, 1, etc.
+
+
+
+
+# ^^ Try different values for 1 above
+
+       # keeps names, whereas "[[" does not:
+
+
+```
+
+
+
+### 3.10.5 Matching strings
+
+```{r}
+?match
+?grep
+
+
+
+
+
+
+```
+
+
+### 3.10.6 Partial matches and regular expressions
+
+```{r}
+?sample
+?letters
+?grep
+?grepl
+?paste
+?regexpr
+?strsplit
+?unlist
+```
+
+
+
+Let's create a fake sequence of genomic data, 100,000 bp long each of the 4 bp A, C, G, and T have equal probability of being represented we want to sample from the letters a, c, g, and t, with replacement
+
+```{r}
+
+
+
+
+```
+
+this gives us the individual vector positions of the genome for each bp
+```{r}
+      # this is the 10th bp of the genomic sequence
+```
+
+
+let's collapse this down into a single character vector
+```{r}
+
+
+```
+
+let's say that we are interested in finding out where/if a specific sequence occurs the sequence of interest is GATTACA
+
+```{r}
+
+
+```
+
+
+We can use regular expressions to find out where among the single character vector that R first returns a positive hit for GATTACA
+
+```{r}
+
+
+```
+
+
+Let's verify that this is indeed the bp in the genome corresponding to that return
+```{r}
+
+
+```
+
+
+Let's then split the genomic sequence up around GATTACA (i.e., split the genomic sequence up and remove GATTACA). For each positive hit on GATTACA, it will split split the vector
+```{r}
+      #Divides original sequence into two vector, based on gattaca
+
+       # This returns the number of matches for GATTACA in the genomic sequence
+
+       # is GATTACA in the original genomic sequence - this should return TRUE
+```
+
+
+does each remaining subsection of the genome contain GATTACA?
+```{r}
+       # this should return FALSE as we split the sequence on GATTACA's 
+```
+
+
+What if you were then interested in the pieces of the genome that contained an additional bp sequence of interest, such as AAACGGG?
+
+```{r}
+     
+   
+       # where does AAACGGG first occur?
+```
+
+
+Alternatively you could do this:
+```{r}
+
+
+
+
+
+#rinse and repeat to find all genomic locations that contain GATTACA bp sequence
+```
+
+
+
+#=======================================================================
+#-------------------------------- END OF WEEK 3, 2018-------------------
+#=======================================================================
+
+
+For week 5, using loops and match/paste/grep to sequence genome type data
+```{r}
+gene <- "gattaca"
+ngenes <- 10000
+nbasepairs <- 15
+genome <- matrix(NA,nrow=ngenes,ncol=nbasepairs)
+genes <- NULL
+for(i in 1:ngenes)
+{
+  for(j in 1:nbasepairs)
+  {
+    genome[i,j] <- sample(letters[c(1,3,7,20)],1,
+                          replace=TRUE,
+                          prob=c(1/4,1/4,1/4,1/4))
+  }
+  genes[i]<-paste(genome[i,1:nbasepairs],collapse='')
+}
+
+
+gene.location <- grep(gene,genes)
+genes[gene.location]
+gene.presence <- NULL
+for(i in 1:ngenes)
+{
+  gene.presence[i] <- grepl(gene,genes[i])
+}
+gene.presence <- as.numeric(gene.presence)
+genes[gene.presence==1]
+```
+

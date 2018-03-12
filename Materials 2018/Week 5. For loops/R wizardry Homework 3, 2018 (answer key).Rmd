@@ -1,0 +1,90 @@
+---
+title: "R wizardry Homework 3, 2018"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message= FALSE)
+```
+
+```{r, echo=FALSE, include=FALSE}
+rm(list=ls(all=TRUE))
+
+data <- read.csv("/home/oscar/MEGAsync/R Wizardry/Materials 2018/Datasets/compounds_c_by_s.csv",
+                 header=T,stringsAsFactors = FALSE)
+head(data)
+```
+
+# Question 1 (3 point) 
+Make an empty plot for the dataset with the X-axis equal to Days, and the Y-axis equal to Methane. Add lines to the empty plot that shows the methane production per day for each unique combination of compound-by-salinity. Use the lines() function for this and use the rainbow colour gradient in R to set the colour of each line equal to the number of that combination of compound-by-salinity.
+
+Hint: use a for loop to iterate through the data of interest (note column c_by_s). There will be multiple ways to partition the dataset. For the colour, set the col parameter in lines() to rainbow(N)[iteration] for N amount of combinations of compound-by-salinity grabbing that iteration's number of combination of compound-by-salinity.
+
+```{r, echo=FALSE, include=TRUE}
+plot(methane ~ day, data, col=0,xlab="Days",ylab="Methane")
+x <- unique(data$c_by_s)
+
+for(i in 1:length(x)){
+  subbed <- subset(data, data$c_by_s == x[i])
+  lines(methane ~ day, data = subbed, col = rainbow(length(x))[i])
+}
+```
+
+# Question 3 (2 points)
+```{r, eval=FALSE, include=TRUE}
+aggregate(methane~compound,data=data,FUN=mean)
+aggregate(methane~compound,data=data,FUN=sd)
+```
+
+You are interested in finding the mean and standard deviation of methane production for each compound. You could use the aggregate functions above, but decide not, instead opting to use a for loop to calculate both mean and standard deviation for each compound. Be sure to keep the name of the compound in the stored data for the mean and standard deviation of methane production (call the object q2_results so it can be used in question 3).
+
+```{r, echo=FALSE, include=TRUE}
+x <- unique(data$salinity)
+q2_results <- NULL
+
+for(i in 1:length(x)){
+  subbed <- subset(data,data$salinity==x[i])
+  salinity <- x[i]
+  mean_methane <- mean(subbed$methane)
+  methane_sd <- sd(subbed$methane)
+  new <- data.frame(salinity,mean_methane,methane_sd)
+  q2_results <- rbind(q2_results,new)
+}
+
+q2_results
+```
+
+#Question 3 (2 points)
+You want to save the results you got from question 2 to a csv file but you want to make sure that you don't accedentally save over another file.  Put the following code inside some logic that checks whether the file exist in your working directory:
+
+write.csv(x = q2_results, file = "question_2_results.csv", row.names = FALSE)
+
+Your code should write the csv only if the file doesn't exist otherwise it should print whatever warning you see fit. Remember that dir() can be used to see if the file is in your working directory.
+
+```{r, eval=FALSE, include=FALSE}
+setwd("/Admin/desktop/R/Datasets/")
+
+if(sum(dir()=="question_2_results.csv") == 0){
+  write.csv(x = results, file = "question_2_results.csv", row.names = FALSE)
+}else{
+  print("For fuck sakes!!!! Stop it! The file already exists")
+}
+```
+
+# Question 4 (3 points)
+Now you want to visualize whether methane production for each compound seems to vary by salinity treatment. Make 4 box-and-whisker plots (2x2; see code below for some help) that shows the methane production per salinity treatment for each compound. Set the colour of each plot to the number (add one) for that compound's iteration. Run this code before starting your for loops for the boxplots: 
+
+par(mfrow=c(2,2), mar=c(4,4,2,2))
+
+```{r, echo=FALSE, include=TRUE}
+par(mfrow=c(2,2),mar=c(4,4,2,2))
+x <- unique(data$compound)
+
+for(i in 1:length(x)){
+  sub <- data[data$compound==x[i],]
+  boxplot(methane~salinity,sub,main=x[i],ylab="Methane Production", xlab="", col=i+1)
+}
+```

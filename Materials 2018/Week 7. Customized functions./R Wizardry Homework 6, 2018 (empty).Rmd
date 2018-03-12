@@ -1,0 +1,73 @@
+---
+title: "R Wizardry Homework 6, 2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Question 1 (1 point) 
+Create and store (i.e., name the object) a vector that starts at 5 and ends at 90 by intervals of 15. Using a R function, how long is this object? 
+Hint: inquire about the “seq()” function.
+
+```{r, echo=FALSE}
+
+
+```
+
+
+## Question 2 (2 points) 
+Using a different method than how you answered question 1, create a named vector that is of the same size as the vector from Question 1 (filled with any numbers). Then combine along rows this new vector with the vector from Question 1, and name this new object. 
+Hint: take a look at the “rbind()” function.
+
+```{r, echo=FALSE}
+
+
+```
+
+What kind of object is this? What are its dimensions? Transpose this new object and name the resulting object as ‘zz’ (zed-zed, or zee-zee -if you're American! :p ). Just google how to transpose objects in R.
+
+```{r, echo=FALSE}
+
+
+```
+
+## Question 3 (1 point) 
+Create and store a 3x4 matrix, and fill it by column (the default command in the “matrix()” function) with a sequence of numbers from 12 to 1.
+
+```{r, echo=FALSE}
+
+
+```
+
+
+## Question 4 (2 points)
+Using the "rep()" function, create a vector of string/character data that is 6 elements long and call it "treatment". The first 3 elements should read “Treatment 1” and the last 3 elements should read “Control”. 
+
+What kind of data is this (use R code to answer this question)? Convert this vector into a factor. What are its levels?
+
+```{r, echo=FALSE}
+
+
+```
+
+
+## Question 5 (2 points)
+Create an array of dimensions 6 x 4 x 2, and fill the array only with odd numbers starting at 1. Interact with the array using square brackets to find out what is the value of the 3rd row, 2nd column, 2nd slice?
+
+```{r, echo=FALSE}
+
+
+```
+
+## Question 6 (2 points) 
+Create a data frame that combines the object ‘zz’, and the object ‘treatment’. Change the column names to "day 1", "day 2" and "group".
+
+What are its dimensions? What is the structure of the object? What does R consider each of the three different columns’ data types to be?
+
+```{r, echo=FALSE}
+
+```
+

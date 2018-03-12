@@ -1,0 +1,240 @@
+---
+title: "R wizardry course week 5 (skeleton), 2016"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+proc.time()
+```
+
+# Week 5 content
+
+5.1 for loops
+5.2 cycle through values
+5.3 example
+5.4 inclass problem
+5.5 if statements
+5.6 while and repeat loops
+5.7 next and break
+5.8 debugging loops
+5.9 help your labmate
+
+```{r}
+rm(list=ls(all=TRUE))
+
+setwd("/Admin/desktop/R/Datasets/")
+data <- read.csv("compounds_stats.csv", header = T, stringsAsFactors = FALSE)
+```
+
+## 5.1 for loops
+
+R doesn't care if you write something 1000 times or have it copy it 1000 times
+But the second is a lot easier for you
+
+```{r}
+
+```
+
+for loops have two stages
+1. Set a variable to equal the next value in a sequence
+2. Run a set of code with that variable at that value
+3. Repeat
+
+```{r}
+
+```
+
+R either takes the rest of the line, the next line, or everything within { } as the looped code
+
+```{r}
+
+```
+
+We can use the variable simply as a tracker to repeat code a given number of times
+For example, we can replicate the rep() function
+
+```{r}
+
+```
+
+
+## 5.2 cycle through values
+
+The most useful thing to do with a for loop is to cycle through values
+
+```{r}
+colnames(data)
+plot(methane_mean ~ day, col = 0, data) #empty plot
+
+#We can use the variable to select different data each time
+
+#methane per day of each individual row
+
+```
+
+
+#5.3 example
+Use t-test to look for methane production diffrences between the salinity levels of every 10th day (starting at day 2), excluding the "BRACKISH" salinity.
+
+```{r}
+#subset dataset for every 10th day and exclude brackish
+
+```
+
+
+## 5.4 inclass problems
+Replicate the tapply() function (you don't need it to have the same formatting)
+
+```{r}
+tapply(data$methane_mean, data$compound, mean, na.rm=TRUE)
+
+
+```
+
+
+## 5.5 if statements
+
+The big advantage of programming is you can have R make decisions
+Allows code to be flexible, dont have to rewrite everything if you change the data
+R makes binary decisions: "if data meets a condition, do this thing or else do this other thing"
+if(conditional argument that leads to one F or T outcome)
+
+```{r}
+
+```
+
+R either takes the rest of the line, the next line, or everything within { } as the conditional action
+
+```{r}
+if(TRUE)
+  i<-4
+i
+
+if(FALSE)
+  i<-5
+i<-6
+i
+
+i<-1
+if(FALSE){
+  i<-6
+  i<-5
+}
+i
+```
+
+if() is useful if we have R make the decision for us
+
+```{r}
+
+
+#Don't pass if() a vector of multiple logic statements (it  will only use the first one)
+
+```
+
+We can use the else statement for efficiency if we want an alternative thing to be done only when the first thing is not done else goes after the if() task and runs using the same rules as an if() task
+
+```{r}
+
+```
+
+For simple tasks, ifelse() puts it all in one function
+Need to use <- instead of =
+
+```{r}
+
+
+#Can also use ifelse() for staggered data selection
+
+
+#ifelse() gives out the data structure as it is given
+
+```
+
+
+## 5.6 while and repeat loops
+
+```{r}
+
+
+#Loop wil be ignored if it is not true when r reads the code
+
+
+#Only checks if the statement is true on each loop
+
+
+#A programmer's wife tells him, "While you're at the grocery store, buy some eggs." He never comes back.
+
+
+#you can press escape (or the red stop sign) to stop the code
+
+
+#repeat and break
+
+```
+
+
+## 5.7 next and break
+
+```{r}
+
+
+#Skip a value (iteration) using next
+
+
+#Skipping nonexistant data
+
+```
+
+
+## 5.8 debugging loops
+
+```{r}
+#Sy.sleep can help you debug your for loops by slowing it down (if combined with a print or plot function)
+count<-0
+
+for(variable in c("First I was\nafraid","I was petrifried","Kept thinking", "I could\nnever get", "this for loop\non my side")){
+  plot(0, col=0)
+  text(1,0,variable,cex=4)
+  Sys.sleep(1)
+  count<-count+1 #this will tell you how many times the loop has happened but you need to set count to zero before the loop
+}
+
+count
+
+
+#print can help you figure out where you loop is breaking down
+x <- 0
+
+for(i in 15:30){
+  if(data[i,"methane_mean"] > 20) x <- x + 1
+}
+
+x
+
+i #you can alway print the variables in your for loop to see the value they reached when it stopped working or look at it's value in the environment
+
+i <- 24 #you can also set the variable you are looping with to different value to see what happens when you run lines of codes within your loop
+
+#it can really helps to manually run through the loop line by line
+```
+
+
+## 5.9 help your labmate
+
+Your labmate want to create a for loop that takes the mean of ozone in ppb for each month and checks if it over their 30ppb threshold.  But they are having trouble getting their code to work and ask you for help as you've taken a course on R.
+```{r}
+air_mean <- rep(0, length(unique(airquality$Month))) #vector for the means
+air_threshold <- rep(FALSE, length(unique(airquality$Month))) #vector for threshold
+index <- 0 #create the index
+
+for(i in unique(airquality$Month)){ #loop through months
+  air_mean[index] <- mean(airquality[airquality$Month == i, "Ozone",]) #mean of ozone
+  index <- index + 1 #increase the index
+  if(air_mean[index + 1] > 80) air_threshold[index + 1] <- TRUE #checks threshold
+}
+
+results <- data.frame(air_mean,air_theshold)
+results
+```

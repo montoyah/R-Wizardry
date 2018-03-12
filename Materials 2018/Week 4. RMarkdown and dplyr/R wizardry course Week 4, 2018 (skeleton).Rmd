@@ -1,0 +1,287 @@
+---
+title: "R wizardry course Week 4, 2018"
+output: pdf_document
+---
+
+```{r, message=FALSE, include=FALSE}
+library(knitr)
+opts_chunk$set(echo = TRUE, include = TRUE, eval = TRUE, collapse = TRUE, results = "hide")
+
+options("readr.num_columns" = 0)
+
+```
+
+
+
+#Week 4
+
+4.1 Finish week 3 materials (create an R project, random numbers and strings). Please remit to the week 3 rmd file, section 3.6 and on.    
+4.2 Brief intro to RMarkdown
+4.3 Dplyr and its verbs  
+
+
+## 4.2 Brief intro to RMarkdown
+4.2.1. Create an rmd file from scratch  
+4.2.2. Set up chunck  
+4.2.3. Set up inside individual chuncks 
+4.2.4. Rendering to PDF, doc, html, slideshow 
+
+
+## 4.3 Dplyr
+
+Incorporates the use of UNIX's pipes (%>%) in R so you build "pipelines" of code.
+
+### Verbs
+
+```{r}
+
+
+```
+
+### 4.3.1 Summarise
+
+The `summarise` function is used to create statistical summaries of your data.  Most of the time it is used in combination with `group_by`.  Let's see how this works.
+
+Let's find the variance among methane formation grouped by salinity: 
+```{r}
+
+
+#Dplyr is very inclusive by taking into account the English-Australian vs. North American spelling of several words, for example.
+
+
+```
+
+
+What about other stats?
+```{r}
+
+
+
+
+```
+
+
+Adding calculations inside summarise, though, will bring errors to the code. Let's try to calculate the standard error of the mean:
+```{r, message=FALSE, eval=FALSE}
+#First, make sure the calculation works by itself:
+
+
+                              
+#Now, include the code (note the use of periods to indicate the dataset):
+
+
+
+```
+
+
+### 4.3.2 Mutate
+
+Mutate is similar to summarise, however, it "mutates" a column instead of summarising it.  Summarise takes a bunch of values and produces one value from those.  Mutate returns a transformed vector that is the same size as the original. Usually we're not grouping but you can if needed.
+
+Let's use mutate here to transform one of our variables to log scale. A new column will be added to the object "compounds" without overwritting it:
+```{r}
+#
+
+
+
+#Notice warning
+```
+
+Look at the transformed variable.  What's the problem here?
+```{r}
+
+
+
+#NaN (not a number, or the result of 0 divided by 0, or the log10 of a negative number) versus NA (not available)
+```
+
+```{r}
+
+
+
+#Another option would be selecting data greater than 0 but you'll lose data...
+
+
+```
+
+Alternative way to do the same thing, although note that this modifies our dataframe in-place instead of returning a copy.
+
+```{r}
+
+
+```
+
+Transmute does the same as mutate but returns only the mutated column
+```{r}
+
+
+```
+
+
+### 4.3.3 Filter
+
+`filter` returns only rows matching a particular condition
+```{r, eval=FALSE}
+        #Whats the error? Instead of a column, we specified a whole data frame but the returned error is not very descriptive.
+
+
+
+#Numbers can be used with or without quotation marks
+
+
+
+#Can include several 
+
+
+
+#or simply exlude "fresh" (a bit of less typing...)
+
+
+
+```
+
+In base R:
+```{r}
+
+
+
+#Get rid of <NA> cells
+
+
+
+```
+
+
+### 4.3.4 Select
+
+`select` gives us the columns we want. Use unqouted column names.
+
+```{r}
+
+
+```
+
+Columns are returned in the order we list them
+```{r}
+
+
+```
+
+Dplyr provides helper functions for selecting columns. `?select_helpers`
+```{r}
+
+
+     #Is not case sensitive
+
+# Move a column to the front
+       # or head(., 10)
+
+```
+
+### 4.3..5 Other "verbs"
+
+`slice` gives us row indexing
+```{r}
+
+
+
+                  #The period is required here!
+
+```
+
+`arrange` orders the dataframe by a variable
+```{r}
+
+
+```
+
+`distinct` gives us only the unique rows
+```{r}
+
+
+```
+
+`count` and `tally` count occurances
+```{r}
+                         #Number of observations per day
+                         #Observations per salinity per day
+```
+
+`sample_n` and `sample_frac` (percentage) allow us to randomly sample rows
+```{r}
+
+
+```
+
+
+## Putting it together
+
+Problem 1.
+
+What are the maxima values in decreasing order, based on compound and salinity, for the mean of methane for days 102, 272, and 72?
+```{r}
+
+
+
+
+
+#or
+
+     
+
+```
+
+
+Mean center (scale) the mean of methane.
+```{r}
+
+  #Times standard deviations each observation is above (positive) or below (negative) the mean.
+
+#Scale = (x - mean(x)) / sd(x) , or simply the reminder divided by the sd. Allows standarization of the data, aka "Z-scores".
+```
+
+
+Using only the treatment and unamended groups, create a new column called "transformation" that is the standarized values for the brackish observations only; values for any other salinity on that new column most be NAs. Addtionally, create a column called "pos_or_neg" that will have a negative or positive sign. If a value in column "transformation" is less than than 0 (zero), that value will have a "-" (negative) sign in the column "por_or_neg", and viceversa for values more than 0. Preserve only numeric values (i.e. get rid of NAs).
+
+
+```{r}
+
+
+
+```
+
+
+On next week (Week 5):
+
+For week 5, using loops and match/paste/grep to sequence genome type data
+```{r}
+gene <- "gattaca"
+ngenes <- 10000
+nbasepairs <- 15
+genome <- matrix(NA,nrow=ngenes,ncol=nbasepairs)
+genes <- NULL
+for(i in 1:ngenes)
+{
+  for(j in 1:nbasepairs)
+  {
+    genome[i,j] <- sample(letters[c(1,3,7,20)],1,
+                          replace=TRUE,
+                          prob=c(1/4,1/4,1/4,1/4))
+  }
+  genes[i]<-paste(genome[i,1:nbasepairs],collapse='')
+}
+
+
+gene.location <- grep(gene,genes)
+genes[gene.location]
+gene.presence <- NULL
+for(i in 1:ngenes)
+{
+  gene.presence[i] <- grepl(gene,genes[i])
+}
+gene.presence <- as.numeric(gene.presence)
+genes[gene.presence==1]
+```
+
+
+

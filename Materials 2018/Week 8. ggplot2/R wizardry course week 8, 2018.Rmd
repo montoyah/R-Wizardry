@@ -1,0 +1,685 @@
+---
+title: "R wizardry course week 7, 2017"
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+rm(list=ls(all=T))
+```
+
+
+# Week 7 content. ggplot2 basics.
+
+
+7.1 Grammar of graphics
+7.2 Scatter plots
+7.3 Line plots
+7.4 Bar plots
+
+
+## 7.1 Grammar of graphics
+
+### What Is Grammar Of Graphics?
+
+"A	grammar	of	graphics	is	a	tool	that	enables	us	to concisely	describe	the	components	of	a	graphic" -Hadley	Wickham.
+                                
+### ggplot2 and the grammar of graphics philosophy behind it 
+Originally	described	in	the	work	of	Leland	Wilkinson 1 a	grammar	of graphics	gives	us	the	formal	elements	of	a	graphic	so	we	can	describe	and construct	any	statistical	graphic	and	move	beyond	named	graphics	(i.e., "scatterplot").
+
+
+"The basic idea: independently specify plot building blocks and combine them to create just about any kind of graphical display you want". Those blocks are:
+
+* **data**: must be a **data frame** for ggplot2 to work
+
+* **aesthetic mapping (aes)**: describes the relationship (x and y, colors, fill) but doesn't supply data.
+
+* **geometric object (geom)**: Shapes (e.g. circles and diamonds) that represent observations
+
+* **statistical transformations (stats)**: Some geoms are indeed statistics, e.g. geom_histogram().
+
+* **scales**: Linear scaling of x and y axes. Scales discrete and continuous.
+
+* **coordinate system**: e.g. geom_smooth(), stat_summary()
+
+* **position adjustments**:
+
+* **faceting**: make multipanel plots of data subsets. Helpful to "declutter" busy graphics
+
+"Every geom has a default statistic, every statistic has a default geom (can be overridden)" (http://ggplot2.org/resources/2007-vanderbilt.pdf).
+
+Based on these concepts, ggplot2 makes fairly easy to produce publication quality plots with only a few lines of code.
+
+
+### ggplot requirements/recommendations
+
+* Data must be in a data frame
+
+* Long versus wide format: Each column should be a variable and each row an observation
+
+
+WARNING: 
+Enhancing plot's aesthetics can be VERY ADDICTIVE!
+Before start coding, set your mind on what type of plot you want (line, plot,both, what to plot, etc.). Plotting can become a time consuming task, often unnecessarily.
+
+### Base R plots vs. ggplot2
+
+## Histograms
+
+Histograms in base R
+```{r}
+
+head(iris)
+str(iris)
+unique(iris$Species)
+
+hist(iris$Petal.Length)
+```
+
+Histograms in ggplot
+```{r}
+library(ggplot2)
+my_histogram <- ggplot(iris, aes(x = Petal.Length)) +
+  geom_histogram()
+
+print(my_histogram) 
+
+```
+
+
+## Boxplots
+
+Base R
+
+```{r}
+boxplot(Petal.Length ~ Species, data = iris)
+?boxplot
+```
+
+ggplot
+
+ggplot automatically optimizes scales for improved aesthetics by deafult, ultimatelly a graphic that is easier to interpret.
+```{r}
+my_boxplot <- ggplot(iris, aes(x = Species, y = Petal.Length)) + 
+  geom_boxplot()
+
+print(my_boxplot)
+```
+
+
+## Scatter plot
+
+```{r}
+plot(Petal.Length ~ Sepal.Length, data = iris, col = Species)
+
+```
+
+ggplot
+```{r}
+my_scatter <- ggplot(data = iris, aes(x= Sepal.Length, y = Petal.Length)) +
+  geom_point(aes(colour = Species))
+
+print(my_scatter)
+```
+
+
+## A closer look:
+
+Histogram:
+* Geom/Stat: Histogram
+* Scale: linear
+* Coordinate system: cartesian
+
+Bar plot:
+* Geom: bar
+* Stat: bin
+* Scale: linear
+* Coordinate system: cartesian
+
+Scatter plot:
+* Geom: point
+* Stat: identity
+* Scale: linear
+* Coordinate system: cartesian
+
+```{r, fig.height = 6, fig.width = 12, fig.align = "left"}
+library(cowplot) # cowplot has many other features, not just mulitple plots in a page
+plot_grid(my_histogram, my_boxplot, my_scatter, nrow = 1, ncol = 3)
+detach("package:cowplot", unload = TRUE)
+
+# ALternatively,
+
+library(gridExtra)
+grid.arrange(my_histogram, my_boxplot, my_scatter, nrow = 1, ncol = 3)
+
+```
+
+
+## Facet grids
+
+Facets are handy to avoid busy, hard to interpret plots.
+
+
+```{r}
+
+# Horizontal facets
+my_scatter + facet_wrap(~ Species)
+
+
+# Horizontal facets (default) 
+my_scatter + facet_wrap(~ Species, strip.position = "right")
+my_scatter + facet_wrap(~ Species, strip.position = "left")
+
+#Vertical facets
+my_scatter + facet_wrap(~ Species, strip.position = "right", dir = "v")
+my_scatter + facet_wrap(~ Species, strip.position = "left", dir = "v")
+
+```
+
+
+## Stats
+
+### Stats smooth
+```{r}
+
+# Notice the colors argument (inside aes()!)
+ggplot(iris, aes(x=Sepal.Length, y=Sepal.Width, color=Species)) + 
+  geom_point() + 
+  stat_smooth(method="lm")
+
+```
+
+
+A common mistake is to put the color argument outside aes()
+```{r}
+
+ggplot(iris, aes(x=Sepal.Length, y=Sepal.Width), color=Species) +
+  geom_point() + 
+  stat_smooth(method="lm")
+```
+
+
+
+## Scales
+
+Scales are used to modify axes and colors. 
+
+For example:
+
+* `facet(aes(scale = "free"))`
+
+```{r}
+my_scatter + facet_grid(Species ~ ., scales = "free_y") # notice this is facet_grid, no facet_wrap. facet_grid() makes plots for all possible result/ecombinations in the ploted variables, including empry plots. facet_wrap() only makes plots that contain data.
+```
+
+* `scale_y_continuous()` Set name, breaks, labels, limits of y-axis
+
+
+```{r}
+
+my_scatter + 
+  scale_x_continuous(breaks = c(5.5, 6.5), limits = c(3,8)) +
+  scale_y_continuous(breaks = c(2.5, 3.5), limits = c(1,8))
+
+```
+
+
+* `scale_x_log10()` log transform the x-axis
+
+```{r}
+
+my_scatter +
+  scale_x_log10() +
+  scale_y_continuous(limits = c(0,8))
+
+my_scatter +
+  coord_trans(x="log2", y="log2")
+
+```
+
+
+* `scale_colour_manual()` Specify colors for geoms
+
+```{r}
+ggplot(data=iris, aes(x=Sepal.Length, y=Sepal.Width, color=Species)) + 
+  geom_point(size=3) + 
+  scale_colour_manual(values=c("red","blue","yellow"))
+```
+
+* Change the order of the elements in the *legend* (deafult is alphabetical)
+
+```{r}
+ggplot(iris, aes(x=Species, y=Petal.Length, fill=Species)) +
+  geom_boxplot()+
+  scale_fill_discrete(breaks=c("virginica","setosa","versicolor"))
+
+```
+
+
+## Other types of geoms available in ggplot2:
+```{r}
+ls(pattern = '^geom_', env = as.environment('package:ggplot2'))
+```
+
+
+## Heatmaps
+```{r}
+library(ggplot2)
+
+ggplot(airquality, aes(x=Month, y=Day)) +
+  geom_tile(aes(fill = Temp), color = "white") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  ylab("Day") +
+  xlab("Month")
+```
+
+
+
+## 7.2 Scatter plots
+
+
+```{r}
+rm(list=ls(all=TRUE))
+
+
+#install.packages('Cairo') #requires install Cairo in your computer first (go to cairographics.org)
+#library(dplyr)
+#library(ggplot2)
+#library(RColorBrewer)
+search()
+#detach("package:RColorBrewer")
+
+```
+
+
+## Let's use ggplot on compounds_triplicate.csv dataset.
+
+```{r}
+data <- read.csv('/home/oscar/MEGAsync/R Wizardry/Materials 2018/Datasets/compounds_stats.csv', header = TRUE, stringsAsFactors = FALSE)
+
+head(data)
+str(data)
+class(data) # Object class
+summary(data) # summary statistics
+which(is.na(data))
+```
+
+Mapping data and first layer of aesthetics. Start by defining what x and y axes will be
+
+
+## Subset the data of interest
+
+Let's select the brackish measurements for hexane treatments.
+
+You can achieve this via usual subsetting (base R) and assing the subsetted data to a new object
+
+```{r}
+plot_data <- data[data$salinity == 'brackish' & 
+                    data$group == 'treatment' &
+                  data$compound == "hexane", ]
+
+plot_data
+str(plot_data)
+```
+
+
+or using dplyr, which doesn't require the creation of an object if using pipes
+
+```{r}
+library(dplyr)
+data %>% filter(salinity == 'brackish', 
+                      group == 'treatment', 
+                      compound == 'hexane') # %>% ggplot() + ...
+
+```
+
+```{r}
+library(dplyr); library(ggplot2)
+
+data %>% filter(salinity == 'brackish', group == 'treatment', compound == 'hexane') %>%
+  ggplot(data = data, aes(x = day, y = methane_mean, shape = compound))
+
+```
+
+Notice we the error: "Error: Mapping should be created with `aes() or `aes_()`". It's caused because a redundance in the call of "data". Instead of calling data again, we use a period (.) to specify the data.
+
+
+```{r}
+point_plot <- data %>% filter(salinity == 'brackish', group == 'treatment') %>% 
+  ggplot(data = ., aes(x = day, y = methane_mean)) #Doesn't work with only data, x and y. Needs a shape, color (colour) or something.
+
+point_plot
+```
+
+Notice	the	scales	are	already	present	-	ggplot	adds	default	scales	based	on	the aesthetic and	type	of	data	(continous,	discrete,	etc.). 
+
+Now that we have the first layer ready -data mapped-, let's start adding geoms.
+
+Add goem_point for scatter plots, then gradients of colors and/or any desired aesthetics
+```{r}
+#Add arguments one at the time so students can see what they are controlling
+point_plot +
+  geom_point(aes(shape = compound, color = salinity, size = methane_mean))
+
+#Add gradients:
+point_plot +
+  geom_point(aes(shape = compound, color = salinity, size = methane_mean)) +
+  scale_colour_gradient(low = "blue")
+
+#Error: Discrete value supplied to continuous scale.
+
+#salinity is not a numeric variable so it can't be mapped to a gradient of color.
+str(data)
+
+#Use methane_mean instead
+point_plot + 
+  geom_point(aes(shape = compound, color = methane_mean, size = methane_mean)) +
+  scale_colour_gradient(low = "blue", high = "red")
+
+```
+
+To avoid calling this object everytime during modifications, out the entire code inside print():
+
+```{r}
+point_plot2 <- point_plot + 
+  geom_point(aes(shape = compound, color = methane_mean, size = methane_mean)) +
+  scale_colour_gradient(low = "blue", high = "red")
+
+point_plot2
+
+
+print(point_plot2 <- point_plot + 
+  geom_point(aes(shape = compound, color = methane_mean, size = methane_mean)) +
+  scale_colour_gradient(low = "blue", high = "red"))
+  
+```
+
+
+Change point size into a fixed number
+```{r}
+point_plot +
+  geom_point(aes(shape = compound, color = methane_mean), size = 5) #changing size to a number instead of a variable will set the same shape size to all plotted points.
+```
+
+
+Change into open symbols instead of solids
+```{r}
+
+point_plot +
+  geom_point(aes(shape = compound, color = methane_mean), size = 5) +
+  scale_shape_discrete(solid = TRUE)
+
+```
+
+Change fill and stroke. "stroke" controls the width of the peripheral circle and "size" (notice it's outside "aes()") controls the size of the point or inner part.
+
+Notice that to accomplish this you need to use shapes like 21 to 24 from the shapes chart (http://www.sthda.com/english/wiki/r-plot-pch-symbols-the-different-point-shapes-available-in-r).
+
+
+```{r}
+
+point_plot +
+  geom_point(aes(shape = compound, color = methane_mean), size = 5) +
+  scale_shape_discrete(solid = TRUE) + 
+  geom_point(shape = 21, colour = "black", fill = "red", stroke = 1, size = 4) # Aesthteics stated doestream overwrite those stated first.
+
+
+point_plot +
+  geom_point(shape = 21, colour = "black", fill = "blue", stroke = 3, size = 4)
+
+```
+
+Add several layers of geom_point or other geoms to get intersting combinations of shapes, colors, etc. when you have many different data. However, it migth be a better idea to stop and think if we really need all that data in a single plot.
+
+```{r}
+point_plot +
+  geom_point(aes(shape = compound, color = methane_mean), size = 5) + 
+  geom_point(colour = "grey90", size = 1.5) +
+  geom_point(aes(shape = factor(group)))
+
+#http://docs.ggplot2.org/current/geom_point.html
+```
+
+
+## 7.3. Line plots
+
+```{r}
+library(gridExtra) #for arrows among many other features
+
+data %>% filter(salinity == 'brackish', group == 'treatment') %>%
+  ggplot(., aes(x = day, y = methane_mean)) +
+  geom_line(aes(color = as.factor(compound)), arrow = arrow(),
+            #arrow = arrow(angle = 15, ends = "both", type = "closed"), 
+            na.rm = TRUE) +
+  geom_point(aes(shape = compound))
+
+
+```
+
+
+Let's play with some more complex data
+```{r}
+data %>% 
+  #filter(salinity == 'brackish', group == 'treatment') %>%
+  ggplot(., aes(x = day, y = methane_mean)) +
+  geom_line(aes(color = as.factor(compound)), arrow = arrow(),
+            #arrow = arrow(angle = 15, ends = "both", type = "closed"), 
+            na.rm = TRUE) +
+  geom_point(aes(shape = compound))
+```
+
+
+There's a problem when trying to link the points. We need to create a unique identifier for each compound_salinity_group combination:
+
+```{r}
+#Need to create a unique identifier. Add a column to the dataset that can be passed to lines for mapping
+
+data$unique_identifier <- paste(data$compound, data$salinity, data$group, sep = " ")
+head(data)
+
+data %>% 
+  #filter(salinity == 'brackish', group == 'treatment') %>%
+  ggplot(., aes(x = day, y = methane_mean)) +
+  geom_line(aes(color = as.factor(unique_identifier)), arrow = arrow(),
+            #arrow = arrow(angle = 15, ends = "both", type = "closed"), 
+            na.rm = TRUE) +
+  geom_point(aes(shape = compound))
+```
+
+Another alternative to the creation of unique identifiers is to use facets
+```{r}
+ggplot(data = data, aes(x = day, y = methane_mean)) +
+  geom_point(aes(shape = salinity), size = 2, na.rm = TRUE) + 
+  geom_line(aes(color = as.factor(unique_identifier)), na.rm = TRUE) +
+  #facet_wrap( ~  compound) + #, scales = 'free')
+  facet_wrap( ~  compound + group, ncol = "salinity", nrow = 3) + #, scales = 'free') 
+  theme(strip.text = element_text(size=12))  #controls facet title
+
+```
+
+At this point, it's clear we don't need all the data we're plotting. Media Only and Sterile controls, for example, have nothing to plot. Filter the data to omit these controls
+
+Let's only keep treatment and unamended levels of "group"
+```{r}
+line_plot <- data %>% filter(group == c("treatment", "unamended")) %>%
+  ggplot(aes(x = day, y = methane_mean))
+
+
+line_plot2<- line_plot +
+  geom_point(aes(shape = paste(compound, salinity)), size = 3, na.rm = TRUE) + 
+  geom_line(aes(group = unique_identifier), na.rm = TRUE) +
+  #facet_wrap( ~  compound) + #, scales = 'free')
+  facet_wrap( ~  group) + #, scales = 'free') 
+  theme(strip.text = element_text(size=12)) + #controls facet title
+  #ggtitle("Methanogenci degradation of polycyclic\n aromatic compounds")
+  ggtitle("Methanogenci degradation of polycyclic\n aromatic compounds") +
+  labs(x = "Time (Days)", y= "Methane formation (umoles)") +
+  theme(plot.title = element_text(color="black", #family = "Arial",  
+                                      face="bold", size=12, hjust=0.5, vjust = 1)) +
+      
+      theme(axis.title.x = element_text(color="black", #family = "Arial",
+                                        face="bold",
+                                        size=10, vjust = -0.5, hjust=0.5,
+                                        margin=margin(20,20,0,0)), 
+            axis.title.y = element_text(color="black", #family = "Arial", 
+                                        face="bold", 
+                                        size=10, vjust = 1, hjust=0.5,
+                                        margin=margin(0,20,0,0)),
+            axis.text.x = element_text (colour='black', #family = 'Arial'
+                                        size = 10),
+            axis.text.y = element_text (colour='black', #family = 'Arial',
+                                        size = 10)) +
+      theme(legend.justification=c(0.3,0), 
+            #legend.position=c(0.65, 0.9),
+            legend.position = "bottom",
+            legend.title = element_text(size = 10), 
+            legend.text = element_text(colour="black", size = 10),
+            legend.key.size = unit(2, "lines"),
+            legend.direction = 'horizontal')
+
+line_plot2
+```
+
+Notice how quickly the code becomes rather complex. Comment everything! It's free!
+
+```{r}
+library(RColorBrewer)
+
+line_plot2 +
+theme(panel.background = element_rect(colour = "pink")) +
+#theme_bw() +
+#geom_abline(intercept = 0, slope = -90)
+#geom_text(data, aes(4.5, 30, label = "Pearson-R = -0.87"))
+  theme(plot.margin=unit(c(0.8, 1.5, 5, 1.5), "cm")) +
+  theme(#panel.grid.major = element_blank(), #element_line(color = 'black', size = 0.4),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(), #panel.border = element_rect(color = 'black', size = 0.5),
+        #panel.background = element_blank(),
+        axis.line.x = element_line(color = 'black'), #element_line(),
+        axis.line.y = element_line(color = 'black'))
+
+```
+
+
+## 7.4 Barplots
+
+Barplots are used with count data. Let's use mtcars dataset. See http://docs.ggplot2.org/0.9.3.1/geom_bar.html for more examples of bar_plot uses.
+
+```{r}
+
+diamonds
+
+ggplot(diamonds, aes(clarity, fill=cut)) + 
+  #geom_bar(position = "dodge") +
+  geom_bar(position = "stack") +
+  #coord_flip() +
+  facet_wrap(~ cut)
+  
+
+```
+
+
+## Other common types of plots
+
+```{r}
+
+# horizontal lines
+ggplot(data = iris, aes(x= Sepal.Length, y = Petal.Length, color = Species)) +
+  geom_point() +
+  geom_hline(yintercept = 5)
+
+# Regression lines
+ggplot(data = iris, aes(x= Sepal.Length, y = Petal.Length, color = Species)) +
+  geom_point() +
+  geom_abline() # regression lines
+
+# violin plots (similar to box plots but also show the probability density)
+ggplot(data = iris, aes(x= Sepal.Length, y = Petal.Length, color = Species)) +
+  geom_point() +
+  geom_violin(alpha=0.1) 
+
+# Vertical lines
+ggplot(data = iris, aes(x= Sepal.Length, y = Petal.Length, color = Species)) +
+  geom_point() +
+geom_vline(xintercept = 5)
+
+# Add line segments instead of a full line (use with package "grid" to form arrows)
+df <- data.frame(x1 = 5, x2 = 8, y1 =4, y2 = 6)
+
+ggplot(data = iris, aes(x= Sepal.Length, y = Petal.Length, color = Species)) +
+  geom_point() +
+  geom_curve(aes(x = x1, y = y1, xend = x2, yend = y2, colour = "curve"), data = df) +
+  geom_segment(aes(x = x1, y = y1, xend = x2, yend = y2, colour = "segment"), data = df) # whatever the curve and segment mean to you. Notice they're included in the legend.
+
+
+# Add lines
+ggplot(data = iris, aes(x= Sepal.Length, y = Petal.Length, color = Species)) +
+  geom_point() +
+  geom_line()
+
+# Add elipses (stat)
+my_plot <- ggplot(data = iris, aes(x= Sepal.Length, y = Petal.Length, color = Species)) +
+  geom_point() +
+  stat_ellipse(aes(color = Species))
+
+```
+
+
+## Save your plot with ggsave
+```{r}
+
+ggsave(filename = "my_plot.pdf", device = "pdf",
+       plot=my_plot, height=20, width=24, units="cm")
+
+getwd()
+warnings()
+```
+
+
+### Challenge
+
+Make your own scatter plot using the "economics" dataset. Use pop as your reponse variable. Apply the themes used for the bar graph from above.
+
+```{r, eval=FALSE, include=FALSE, echo=FALSE}
+head(economics);str(economics)
+
+ggplot(data = economics, aes(x = date, y = pop))+
+  geom_line(color = "#00AFBB", size = 1) # adding themes
+
+```
+
+
+
+```{r}
+sessionInfo()
+citation("ggplot2");citation("cowplot"); citation("extrafont")
+
+```
+
+
+
+## Tips/take home message:
+
+Plots are meant to help with data interpretation. Busy plots achieve the opposite. Plots are meant to help to tell a story, no to make it confusing. 
+
+If you're running out of colors in a plot, take this as a warning that you are adding too much information to a single plot. Facets are your friends!
+
+Avoid using 3D plots (specially if you have 2D data!) and pie charts. They are not accurate and not informative enough.
+
+## Recommedned reads:
+R naming conventions: https://google.github.io/styleguide/Rguide.xml
+
+Recommedned addition packages:
+RColorbrewer (colors for plots, including color-blind friendly palettes)
+Cowplot (linear and non-linear time series)
+scales (easy manipulatiion of scales)
+
+## Sources: 
+* https://rpubs.com/mccannecology/53464
+* http://tutorials.iq.harvard.edu/R/Rgraphics/Rgraphics.html
+* https://learnr.wordpress.com/2010/01/26/ggplot2-quick-heatmap-plotting/
+* https://www.r-bloggers.com/how-to-create-a-fast-and-easy-heatmap-with-ggplot2/

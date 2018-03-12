@@ -1,0 +1,526 @@
+---
+title: "R wizardry course Week 2, 2017"
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Day 2
+
+Side note- Brief intructions about final project: start thinking in a final project (something useful for the you!)
+
+Week 2 topics:
+
+2.1 Importing data into R/RStudio
+
+2.2 Subsetting data
+
+2.3 Summary stats
+
+
+## Getting a R fresh-session ready
+
+It's always a good idea to start a new R session by making sure no varibles from our previous sessions are still hanging around in the local or global environments.
+
+```{r}
+a <- 5
+ls()
+rm(list=ls(all=TRUE)) #Removes any objects from R environment.
+```
+
+
+```{r}
+
+```
+
+------------------------------------
+
+## 2.1 Importing data into R
+
+### Example datasets
+R has buit-in example data sets that can be loaded into the environment via "library" function.
+
+```{r}
+library(datasets)
+cars
+mtcars
+trees
+```
+
+
+### Spreadsheets organization
+
+There are a few points to keep in mind about our spreadsheet (tab or comma separated files), before importing them into R.
+
+* Long format is prefered over wide.
+
+* Do not use double headings (i.e. header and subheaders for columns names)
+
+* Avoid the use of special characters in your file (asterists, slashes, etc.)
+
+* Be consistent about the use of capitals and lower-cases.
+
+
+```{r}
+
+## read.csv is the function to read that in. Is there a header on the columns or no header?
+
+
+
+```
+
+
+### Importing csv files
+
+```{r}
+
+
+getwd()  # What directory are you in?
+
+
+setwd("/home/oscar/Desktop")
+setwd("/home/oscar/MEGAsync/R Wizardry/Materials 2018/Week 2")
+ # Somethimes it's required to end the full path with a slash.
+
+dir()
+
+?read.csv
+
+read.csv("/home/oscar/MEGAsync/R Wizardry/Materials 2018/Datasets/compounds_triplicates_wide.csv")
+
+#or just read the file direclty specifying the full path to the text file:
+
+messy.compounds <- read.csv("/home/oscar/MEGAsync/R Wizardry/Materials 2018/Datasets/compounds_triplicates_wide.csv", header = TRUE, sep = ",", fill = TRUE, check.names = FALSE, stringsAsFactors = TRUE, comment.char = "")
+
+str(messy.compounds)
+View(messy.compounds)
+
+#However, it's a better idea set up your working directory (save files, write tables, etc.).
+
+head(messy.compounds)
+colnames(messy.compounds)
+names(messy.compounds)
+
+```
+
+
+Now that the data was imported, let's do some housekeeping before starting data manipilations:
+```{r}
+#install.packages("tidyr")
+library(tidyr)
+
+#The objective is to have one observation (value) per row.
+tidy.compounds <- gather(messy.compounds, key = day, value = methane_umoles, -compound, -salinity, -group, -replicate_number)
+
+View(messy.compounds)
+View(tidy.compounds)
+
+#Need to change "day" data class
+str(tidy.compounds$day) # day is character and I want it as a factor
+
+tidy.compounds$day <- as.factor(tidy.compounds$day)
+unique(tidy.compounds$day)
+
+#Let's get to know better our data set:
+head(tidy.compounds)
+
+names(tidy.compounds) #Works as colnames for data frames
+```
+
+
+----------------------------------------
+
+## 2.2 Subsetting data
+
+
+There are 6 different ways to subset and 3 subsetting operators.  Let's go through each data type and see how these work.  We'll start by using the `[` operator.
+
+## Atomic vectors
+
+```{r}
+x = c(3.4, 5.3, 2.3, 1.0, 19.3)
+```
+
+
+Positive integers return elements at those positions
+
+```{r}
+x [c (2,4) ]
+
+```
+
+
+Negative integers leave out elements at those positions
+
+```{r}
+
+x [-1] 
+x [-c(3,4)]
+x [c (-3, -4)]
+
+x[-4, 5] #Error: Don't mix positive and negative integers
+
+```
+
+
+Logical vectors return elements at the position where the value is `TRUE`. 
+
+```{r}
+x[c(TRUE, FALSE, TRUE, TRUE, FALSE)]
+```
+
+This is likely the method you'll use the most as you can write expressions that create a logical vector
+
+```{r, collapse=TRUE}
+x
+x > 1
+x[x > 1]
+
+```
+
+
+### Two less common methods
+
+Blank returns the original vector
+```{r}
+x[]
+```
+
+Zero returns a zero length vector
+
+```{r}
+x[0]
+```
+
+
+And finally, if your vector is named you can use character vectors. We'll use this a fair bit with data frames.
+```{r}
+y <- setNames(x, c("A", "B", "C", "D", "E"))  #Add names to the existing vector
+
+y[c("C", "E", "A")]
+```
+
+
+## Lists
+
+Lists work in the same way as vectors.  We'll look at how the different subsetting operators `[`, `[[`, and `$` change what you pull out of the list.
+
+## Matrices
+
+These concepts are applicable to higher-order arrays as well but we won't discuss those here.
+
+```{r}
+mat = matrix(1:9, nrow = 3)
+colnames(mat) <- c("A", "B", "C")
+mat
+```
+
+
+We now have two dimensions, each one is subset like a one-dimensional vector. Rows are first, then columns.
+
+```{r}
+
+# keep all columns (the column index is blank)
+mat[1:2, ]
+
+# keep all rows (the row index is blank)
+mat[ , 2:3]
+
+# both
+mat[2:3, 1:2]
+
+# use column names
+mat[2:3, c("A", "B")]
+
+```
+
+
+Matrices can be indexed with a single vector and in this case the matrix will behave like a vector.
+
+```{r}
+mat[1:4]
+```
+
+The matrix is stored in column-major order; count down the column first then start at the top of the next one.
+
+## Data frames
+
+Data frames can be indexed with a single vector like list (remember data frame columns are like a list).  They can (and are more commonly) indexed with two vectors like a matrix.
+
+
+```{r}
+
+tidy.compounds[c("compound", "salinity")]
+tidy.compounds[1:2, ]
+tidy.compounds[tidy.compounds$methane_umoles > 8, ]
+
+```
+
+
+A few more examples
+
+```{r}
+# predefined vector
+rows_to_keep = sample(1:nrow(iris), size = 10)
+new_iris = iris[rows_to_keep, ]
+new_iris
+
+# logical
+new_iris$Species == "setosa"
+
+# Numeric
+new_iris[new_iris$Species == "setosa", ]
+
+```
+
+## Subsetting operators
+
+* You can also `[[` and `$` to subset.  
+* The difference is the type of object they return.  
+* `[[` is most useful for lists because `[` always returns a list and not the actual value.  
+* However, `[[` only returns a single value so it can only be used with a single positive integer or a string. `$` is short hand for `[[` with characters.
+
+
+```{r, error=TRUE}
+
+a <- list(x = 1, y = 2)
+typeof(a[1])
+is.na(a)
+is.na(tidy.compounds)
+
+a[[1:2]] #Double brackets can only return a single value
+a[[1]]
+a[["y"]]
+
+# or
+
+
+# or
+
+a$y
+
+```
+
+
+The different operators are useful in different situations and you often find yourself using multiple operators in a single subsetting operation
+
+```{r}
+# $ is often used to pull out data frame columns or named list items
+mtcars$cyl
+
+# mix and match
+mtcars[mtcars$cyl == 6, 1:4]
+
+ #Finds where in columns 1 to 4, cyl is equal to 6.
+mtcars[mtcars$cyl == 6, c("mpg", "cyl", "hp")]
+
+```
+
+
+S4 objects
+
+Brief example:
+
+```{r}
+
+ps <- readRDS("/home/oscar/MEGAsync/R Wizardry/Materials 2018/Datasets/ps.rds")
+
+ps
+str(ps)
+class(ps)
+
+colnames(ps@otu_table)
+rownames(ps@otu_table)
+
+
+```
+
+
+## Problem 1
+Triple the umoles of methane obtained on day 10 and write them into the data frame and name the object "compounds.triple".
+
+```{r}
+
+ #Find the unique days
+unique(tidy.compounds$day)
+
+#Find values for day 10
+tidy.compounds$methane_umoles[tidy.compounds$day  == 10]
+
+ #Triple the values
+tidy.compounds$methane_umoles[tidy.compounds$day == 10] *3
+
+# Make a copy of tidy.compounds and call it "compounds.triple". Now, use the above tripled values from above to replace those same days in the "compounds.triple" object:
+
+compounds.triple <- tidy.compounds
+
+compounds.triple$methane_umoles[compounds.triple$day == 10] <- compounds.triple$methane_umoles[compounds.triple$day == 10] * 3
+
+```
+
+-------------------------------------
+
+## 2.3 Summary stats
+
+Summary stats are part of a fundamental step in data processing: exploratory data analysis.
+
+
+```{r}
+
+summary(tidy.compounds)
+dim(tidy.compounds)
+
+```
+
+
+```{r}
+mean(tidy.compounds$methane_umoles)
+
+#vs.
+
+mean(tidy.compounds$methane_umoles, na.rm = TRUE) #It's part of good coding practice write the full word "TRUE"
+
+```
+
+```{r}
+sum(tidy.compounds$methane_umoles, na.rm = TRUE)
+```
+
+
+```{r}
+sd(tidy.compounds$methane_umoles, na.rm = TRUE)
+```
+
+```{r}
+var(tidy.compounds$methane_umoles, na.rm = TRUE)
+```
+
+
+```{r}
+median(tidy.compounds$methane_umoles, na.rm = TRUE)
+```
+
+
+```{r}
+quantile(tidy.compounds$methane_umoles, na.rm = TRUE)
+help("quantile")
+```
+
+```{r}
+#No function for standard error so let's install a package that has it:
+#install.packages("plotrix")
+library(plotrix)
+
+std.error(tidy.compounds$methane_umoles, na.rm = TRUE)
+```
+
+```{r}
+range(tidy.compounds$methane_umoles, na.rm = TRUE)
+
+```
+
+
+```{r}
+max(tidy.compounds$methane_umoles, na.rm = TRUE)
+min(tidy.compounds$methane_umoles, na.rm = TRUE)
+```
+
+```{r}
+sort(tidy.compounds$methane_umoles, decreasing = TRUE)
+sort(tidy.compounds$methane_umoles, decreasing = FALSE)
+```
+
+```{r}
+length(tidy.compounds$methane_umoles)
+ncol(tidy.compounds)
+nrow(tidy.compounds)
+```
+
+```{r}
+hist(tidy.compounds$methane_umoles)
+boxplot(tidy.compounds$methane_umoles)
+qqnorm(tidy.compounds$methane_umoles)
+qqline(tidy.compounds$methane_umoles)
+```
+
+```{r}
+
+```
+
+
+```{r}
+
+ #Plots residuals to assess normality
+
+
+```
+
+----------------------------------
+
+## Extra
+
+### Saving sessions in R.
+
+It's a good idea saving your sessions when you have been doing long calculations, simulations or modelling and you're not done yet (because it's already 06:00 am and you haven't slept in almost two days!). Think of saving your sessin as a time saver for the next time you run your script. Add comments to your code so you know where you stoped the previous session (being deteailed will save you time and headaches!).
+
+
+Seesions are saved as images:
+
+#### To save your session:
+
+```{r}
+save.image("/oscar/MEGAsync/R Wizardry/Materials 2018/Week 2/week_2_session.rdata")
+
+
+```
+
+
+### Load the session you saved: 
+
+Close R, Re-open R in a new-fresh session.
+
+```{r}
+load("/oscar/MEGAsync/R Wizardry/Materials 2018/Week 2/week_2_session.rdata")
+```
+
+
+#### To save and then load images of individuals objects:
+
+Notice the extension is different for individual objects than for whole sessions.
+
+```{r}
+head(tidy.compounds)
+View(tidy.compounds)
+
+saveRDS(tidy.compounds, "/oscar/MEGAsync/R Wizardry/Materials 2018/Week 2/tidy_compounds.rds")
+
+
+```
+
+Close R, Re-open R in a new-fresh session. 
+
+```{r}
+tidy.compounds <- readRDS("/oscar/MEGAsync/R Wizardry/Materials 2018/Week 2/tidy_compounds.rds")
+
+tidy.compounds
+```
+
+
+
+
+-----------------
+Packages used in this sessino and citing packages in a publication.
+
+```{r}
+sessionInfo()
+
+citation("dada2")
+
+citation()
+```
+
+
