@@ -1,0 +1,308 @@
+---
+title: "R Wizardry 2018, week 9"
+author: "Ryan Tate and Oscar Montoya"
+date: "March 6, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Week 8
+Creating flexible functions in R
+
+
+```{r}
+
+setwd("/home/oscar/MEGAsync/R Wizardry/R-Wizardry_GitHub/Materials 2018/Datasets/")
+data.comps = read.csv("compounds_stats.csv")
+
+```
+
+
+
+```{r}
+#install.packages("ggplot2")
+library(ggplot2)
+
+ggplot(subset(data.comps, compound == "unamended" & methane_mean > 0), aes(day, methane_mean)) +
+  geom_point(size=4,na.rm=TRUE) +
+  facet_wrap( ~  salinity, ncol=2, nrow = 2, scales = 'free') +
+  scale_y_continuous("Methane (umoles)", limits=c(0, 240)) +
+  scale_x_continuous("Time (days)") +
+  ggtitle("Unamended Incubations") +
+  theme(plot.title = element_text(family="serif", color="black", face="bold", size=40, hjust=0.5, vjust = 1)) +
+  theme(axis.title.x = element_text(family = "serif", color="black", face="bold",size=30, vjust = -0.5, hjust=0.5,margin=margin(20,20,0,0)),
+        axis.title.y = element_text(family = "serif", color="black", face="bold", size=30, vjust = 1, hjust=0.5,margin=margin(0,20,0,0)),
+        axis.text.x = element_text (colour='black', size = 20, family = 'serif'),
+        axis.text.y = element_text (colour='black', size = 20, family = 'serif'))
+```
+
+## Let's modify th eplot above and turn it into a fucntion
+```{r}
+
+my.plot <-function(data,main, title, ...){
+  ggplot(subset(data, data[,"compound"] == main), aes(day, methane_mean)) +
+    geom_point(size=1,na.rm=TRUE) +
+    facet_wrap( ~  salinity, ncol=2, nrow = 2, scales = 'free') +
+    scale_y_continuous("Methane (umoles)", limits=c(0, 240)) +
+    scale_x_continuous("Time (days)") +
+    ggtitle(title)
+}
+
+#This section subsets the methane more than 0 to avoid negative values in y axis
+my.plot(data=data.comps[data.comps$methane_mean > 0, ],
+        main="unamended", title="Unamended Incubations") +
+  #geom_line() + 
+  geom_smooth(se = FALSE)
+
+my.plot(data=data.comps,main="toluene", title="Toluene Incubations")
+# can select compound
+
+
+my.plot<-function(data, main, main.var, title){
+  ggplot(subset(data, data[,main.var] == main), aes(day, methane_mean)) +
+    geom_point(size=4,na.rm=TRUE) +
+    facet_wrap( ~  salinity, ncol=2, nrow = 2, scales = 'free') +
+    scale_y_continuous("Methane (umoles)", limits=c(0, 150)) +
+    scale_x_continuous("Time (days)") +
+    ggtitle(title)
+}
+
+my.plot(data=data.comps, main="unamended", main.var = "compound", title="Unamended Incubations")
+
+my.plot(data=data.comps,main="treatment", main.var = "group", title="Group: Treatment")
+# can select subset
+
+my.plot<-function(data,main,main.var,subtitle,x,y,sc, title, xlab, ylab){
+  ggplot(subset(data, data[,main.var] == main), aes_string(x, y)) +
+    geom_point(aes_string(shape = sc,color = sc), size=4,na.rm=TRUE) +
+    facet_wrap( subtitle, ncol=2, nrow = 2, scales = 'free') +
+    scale_y_continuous(ylab, limits=c(0, 150)) +
+    scale_x_continuous(xlab) +
+    ggtitle(title)
+}
+
+my.plot(data=data.comps,main="unamended",main.var="compound",subtitle="salinity",x="day",y="methane_mean",sc="staff", title="Unamended Incubations", xlab= "Time (days)", ylab= "Methane (umoles)")
+
+my.plot(data=data.comps,main="Chuck_Norris",main.var="staff",subtitle="salinity",x="day",y="methane_mean", sc="compound", title="Chuck Norris", xlab= "Time (days)", ylab= "Methane (umoles)")
+# can select any x and y
+```
+
+## Adding warnings
+```{r}
+my.plot<-function(data,main,main.var,subtitle,x,y,sc, title, xlab, ylab){
+  if(all(data[,main.var]!=main)) stop("Error: main is not a subset of main.var!") #stop() is better than print() if you want to make your own error message
+  ggplot(subset(data, data[,main.var] == main), aes_string(x, y)) +
+    geom_point(aes_string(shape=sc, color=sc), size=4,na.rm=TRUE) +
+    facet_wrap( subtitle, ncol=2, nrow = 2, scales = 'free') +
+    scale_y_continuous(ylab, limits=c(0, 150)) +
+    scale_x_continuous(xlab) +
+    ggtitle(title)
+}
+
+my.plot(data=data.comps,main="unamended",main.var="compound",subtitle="salinity",x="day",y="methane_mean",sc="staff", title="Unamended Incubations", xlab= "Time (days)", ylab= "Methane (umoles)") #Still works fine
+
+my.plot(data=data.comps,main="fresh",main.var="compound",subtitle="salinity",x="day",y="methane_mean",sc="staff", title="Unamended Incubations", xlab= "Time (days)", ylab= "Methane (umoles)") # Gives you a warning
+
+my.plot(data = data.comps, main = "unamended", main.var = "compounds", subtitle = "salinity", x = "day", y = "methane_mean",sc="staff", title="Unamended Incubations", xlab= "Time (days)", ylab= "Methane (umoles)") #Note this won't give you a warning; the code breaks before the warning
+```
+
+## Let's allow us to plug in less information
+```{r}
+my.plot <- function(data,main,main.var,subtitle,x,y,sc=NULL, title=main, xlab=x, ylab=y){
+  if(all(data[,main.var]!=main)) print("Warning: title and title.var don't match!")
+  ggplot(subset(data, data[,main.var] == main), aes_string(x, y)) +
+    geom_point(aes_string(shape = sc,color = sc), size=4,na.rm=TRUE) +
+    facet_wrap( subtitle, ncol=2, nrow = 2, scales = 'free') +
+    scale_y_continuous(ylab, limits=c(0, 150)) +
+    scale_x_continuous(xlab) +
+    ggtitle(title)
+}
+
+my.plot(data=data.comps,main="unamended",main.var="compound", subtitle="salinity",x="day",y="methane_mean")
+# defaults are a good way to add flexibility
+
+
+
+my.plot<-function(data,main=NA,main.var=NA,subtitle,x,y,sc=NULL, title=main, xlab=x, ylab=y){
+  if(!is.na(main)){
+    if(all(data[,main.var]!=main)) print("Warning: title and title.var don't match!")
+    data <- data[which(data[,main.var]==main),]
+  }else
+    if(is.na(title)) title<-subtitle
+  ggplot(data, aes_string(x, y)) +
+    geom_point(aes_string(shape = sc,color = sc), size=4, na.rm=TRUE) +
+    facet_wrap( subtitle, ncol=2, nrow = 2, scales = 'free') +
+    scale_y_continuous(ylab, limits=c(0, 150)) +
+    scale_x_continuous(xlab) +
+    ggtitle(title)
+}
+
+my.plot(data=data.comps,subtitle="salinity",x="day",y="methane_mean")
+# Subseting is now optional
+```
+
+## Making it work with another dataset
+```{r}
+my.plot<-function(data,main=NA,main.var=NA,subtitle,x,y,sc=NULL,xrange=NULL,yrange=NULL, title=main, xlab=x, ylab=y){
+  if(!is.na(main)){
+    if(all(data[,main.var]!=main)) print("Warning: title and title.var don't match!")
+    data <- data[which(data[,main.var]==main),]
+  }else
+    if(is.na(title)) title<-subtitle
+  ggplot(data, aes_string(x, y)) +
+    geom_point(aes_string(shape = sc,color = sc),size=4 ,na.rm=TRUE) +
+    facet_wrap( subtitle, scales = 'free') +
+    scale_y_continuous(ylab, limits = yrange) +
+    scale_x_continuous(xlab, limits = xrange) +
+    ggtitle(title)
+}
+
+my.plot(data=diamonds, main= "E", main.var = "color", subtitle = "cut", x = "carat", y = "price")
+# Watch out for features that don't seem linked to your data
+```
+
+## Let's make a flexible bar graph
+```{r}
+# Here's a bar graph
+ggplot(diamonds, aes(clarity, fill = cut)) +
+  geom_bar(position = "stack") +
+  coord_flip() +
+  facet_wrap( ~ cut, ncol=2, nrow = 3, scales = 'free') +
+  ggtitle("Cut")
+
+  
+
+my.bar<-function(data, title, subtitle, x){
+  ggplot(data, aes_string(x, fill = subtitle)) +
+    geom_bar(position = "stack") +
+    coord_flip() +
+    facet_wrap(subtitle, scales = 'free') +
+    ggtitle(title)
+}
+
+my.bar(data=diamonds, title= "Cut", subtitle = "cut", x = "clarity")
+```
+
+## Let's make a function that's smart enough to know what graph I want
+```{r}
+my.plot<-function(data,main=NA,main.var=NA,subtitle,x,y=NA,sc=NULL,xrange=NULL,yrange=NULL, title=main, xlab=x, ylab=y){
+  if(!is.na(main)){
+    if(all(data[,main.var]!=main)) print("Warning: title and title.var don't match!")
+    data <- data[which(data[,main.var]==main),]
+  }else
+    if(is.na(title))title<-subtitle
+  if(!is.na(y)){
+   ggplot(data, aes_string(x, y)) +
+    geom_point(aes_string(shape = sc,color = sc),size=4,na.rm=TRUE) +
+    facet_wrap(subtitle, scales = 'free') +
+    scale_y_continuous(ylab, limits = yrange) +
+    scale_x_continuous(xlab, limits = xrange) +
+    ggtitle(title)
+  }else
+    my.bar(data=data, title = title, subtitle = subtitle, x=x)
+}
+
+my.plot(data=diamonds, main= "E", main.var = "color", subtitle = "cut", x = "clarity")
+
+my.plot(data=diamonds, main= "E", main.var = "color", subtitle = "cut", x = "carat", y = "price")
+
+my.plot(data=data.comps,main="unamended",main.var="compound",subtitle="salinity",x="day",y="methane_mean",sc="staff",yrange = c(0,150))
+
+
+
+# Just for fun
+my.bar<-function(data, title, subtitle, x, sc=sc){
+  if(is.na(sc)) sc<-subtitle
+  ggplot(data, aes_string(x, fill = sc)) +
+    geom_bar(position = "stack") +
+    coord_flip() +
+    facet_wrap(subtitle, scales = 'free') +
+    ggtitle(title)
+}
+
+my.plot<-function(data,main=NA,main.var=NA,subtitle,x,y=NA,sc=NULL,xrange=NULL,yrange=NULL, title=main, xlab=x, ylab=y){
+  if(!is.na(main)){
+    if(all(data[,main.var]!=main)) print("Warning: title and title.var don't match!")
+    data <- data[which(data[,main.var]==main),]
+  }else
+    if(is.na(title))title<-subtitle
+  if(!is.na(y)){
+   ggplot(data, aes_string(x, y)) +
+    geom_point(aes_string(shape = sc,color = sc),size=4,na.rm=TRUE) +
+    facet_wrap(subtitle, scales = 'free') +
+    scale_y_continuous(ylab, limits = yrange) +
+    scale_x_continuous(xlab, limits = xrange) +
+    ggtitle(title)
+  }else
+    my.bar(data=data, title = title, subtitle = subtitle, x=x,sc=sc)
+}
+
+my.plot(data=diamonds, subtitle = "cut", x = "clarity", sc="color")
+```
+
+## And Now for a for loop
+```{r}
+for(i in unique(data.comps$compound))
+  my.plot(data=data.comps,main=i,main.var="compound",subtitle="salinity",x="day",y="methane_mean",sc="staff",yrange = c(0,240))
+
+my.plot<-function(data,main=NA,main.var=NA,subtitle,x,y=NA,sc=NULL,xrange=NULL,yrange=NULL, title=main, xlab=x, ylab=y){
+  if(!is.na(main)){
+    if(all(data[,main.var]!=main)) print("Warning: title and title.var don't match!")
+    data <- data[which(data[,main.var]==main),]
+  }else
+    if(is.na(title))title<-subtitle
+  if(!is.na(y)){
+   plot<-ggplot(data, aes_string(x, y)) +
+    geom_point(aes_string(shape = sc,color = sc),size=4,na.rm=TRUE) +
+    facet_wrap(subtitle, scales = 'free') +
+    scale_y_continuous(ylab, limits = yrange) +
+    scale_x_continuous(xlab, limits = xrange) +
+    ggtitle(title)
+   print(plot)
+  }else
+    my.bar(data=data, title = title, subtitle = subtitle, x=x,sc=sc)
+}
+
+for(i in unique(data.comps$compound))
+  my.plot(data=data.comps,main=i,main.var="compound",subtitle="salinity",x="day",y="methane_mean",sc="staff",yrange = c(0,240))
+
+# You could even make a function that runs this for loop for you
+```
+
+
+
+
+```{r}
+my.plot<-function(data,main=NA,main.var=NA,subtitle,x,y=NA,sc=NULL,xrange=NULL,yrange=NULL, title=main, xlab=x, ylab=y, ...){
+  if(!is.na(main)){
+    if(all(data[,main.var]!=main)) print("Warning: title and title.var don't match!")
+    data <- data[which(data[,main.var]==main),]
+  }else
+    if(is.na(title))title<-subtitle
+  if(!is.na(y)){
+   plot<-ggplot(data, aes_string(x, y)) +
+    geom_point(aes_string(shape = sc,color = sc),size=4,na.rm=TRUE) +
+    facet_wrap(subtitle, scales = 'free') +
+    scale_y_continuous(ylab, limits = yrange) +
+    scale_x_continuous(xlab, limits = xrange) +
+    ggtitle(title) +
+    theme(plot.title = element_text(family="serif", color="black", face="bold", size=40, hjust=0.5, vjust = 1)) +
+    theme(axis.title.x = element_text(family = "serif", color="black", face="bold",size=30, vjust = -0.5, hjust=0.5,margin=margin(20,20,0,0)),
+          axis.title.y = element_text(family = "serif", color="black", face="bold", size=30, vjust = 1, hjust=0.5,margin=margin(0,20,0,0)),
+          axis.text.x = element_text (colour='black', size = 20, family = 'serif'),
+          axis.text.y = element_text (colour='black', size = 20, family = 'serif'))
+   print(plot)
+  }else
+    my.bar(data=data, title = title, subtitle = subtitle, x=x,sc=sc)
+}
+
+my.plot(data=data.comps,main="unamended",main.var="compound",subtitle="salinity",x="day",y="methane_mean",yrange = c(0,150), title="Unamended Incubations", xlab= "Time (days)", ylab= "Methane (umoles)")
+
+my.plot(data=diamonds, subtitle = "cut", x = "carat", y = "price", title="Diamonds", xlab= "Carat", ylab= "Price ($)") 
+
+
+sessionInfo()
+```
