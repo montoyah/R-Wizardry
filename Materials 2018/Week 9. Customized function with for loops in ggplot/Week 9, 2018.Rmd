@@ -30,7 +30,7 @@ ggplot(subset(data.comps, compound == "unamended" & methane_mean > 0), aes(day, 
   geom_point(size=4,na.rm=TRUE) +
   facet_wrap( ~  salinity, ncol=2, nrow = 2, scales = 'free') +
   scale_y_continuous("Methane (umoles)", limits=c(0, 240)) +
-  scale_x_continuous("Time (days)") +
+  scale_x_continuous("Time\n (days)") +
   ggtitle("Unamended Incubations") +
   theme(plot.title = element_text(family="serif", color="black", face="bold", size=40, hjust=0.5, vjust = 1)) +
   theme(axis.title.x = element_text(family = "serif", color="black", face="bold",size=30, vjust = -0.5, hjust=0.5,margin=margin(20,20,0,0)),
@@ -39,12 +39,13 @@ ggplot(subset(data.comps, compound == "unamended" & methane_mean > 0), aes(day, 
         axis.text.y = element_text (colour='black', size = 20, family = 'serif'))
 ```
 
-## Let's modify th eplot above and turn it into a fucntion
+## Let's modify the plot above and turn it into a function
 ```{r}
 
-my.plot <-function(data,main, title, ...){
-  ggplot(subset(data, data[,"compound"] == main), aes(day, methane_mean)) +
-    geom_point(size=1,na.rm=TRUE) +
+my.plot <- function(data, main, title, ...){
+  ggplot(subset(data, data[, "compound"] == main), 
+         aes(day, methane_mean)) +
+    geom_point(size=1, na.rm=TRUE) +
     facet_wrap( ~  salinity, ncol=2, nrow = 2, scales = 'free') +
     scale_y_continuous("Methane (umoles)", limits=c(0, 240)) +
     scale_x_continuous("Time (days)") +
@@ -52,7 +53,7 @@ my.plot <-function(data,main, title, ...){
 }
 
 #This section subsets the methane more than 0 to avoid negative values in y axis
-my.plot(data=data.comps[data.comps$methane_mean > 0, ],
+my.plot(data= data.comps[data.comps$methane_mean > 0, ],
         main="unamended", title="Unamended Incubations") +
   #geom_line() + 
   geom_smooth(se = FALSE)
@@ -75,7 +76,7 @@ my.plot(data=data.comps, main="unamended", main.var = "compound", title="Unamend
 my.plot(data=data.comps,main="treatment", main.var = "group", title="Group: Treatment")
 # can select subset
 
-my.plot<-function(data,main,main.var,subtitle,x,y,sc, title, xlab, ylab){
+my.plot<-function(data, main, main.var, subtitle, x, y, sc, title, xlab, ylab){
   ggplot(subset(data, data[,main.var] == main), aes_string(x, y)) +
     geom_point(aes_string(shape = sc,color = sc), size=4,na.rm=TRUE) +
     facet_wrap( subtitle, ncol=2, nrow = 2, scales = 'free') +
@@ -92,7 +93,7 @@ my.plot(data=data.comps,main="Chuck_Norris",main.var="staff",subtitle="salinity"
 
 ## Adding warnings
 ```{r}
-my.plot<-function(data,main,main.var,subtitle,x,y,sc, title, xlab, ylab){
+my.plot<- function(data, main, main.var, subtitle, x, y, sc, title, xlab, ylab){
   if(all(data[,main.var]!=main)) stop("Error: main is not a subset of main.var!") #stop() is better than print() if you want to make your own error message
   ggplot(subset(data, data[,main.var] == main), aes_string(x, y)) +
     geom_point(aes_string(shape=sc, color=sc), size=4,na.rm=TRUE) +
@@ -126,7 +127,7 @@ my.plot(data=data.comps,main="unamended",main.var="compound", subtitle="salinity
 
 
 
-my.plot<-function(data,main=NA,main.var=NA,subtitle,x,y,sc=NULL, title=main, xlab=x, ylab=y){
+my.plot <- function(data,main=NA,main.var=NA,subtitle,x,y,sc=NULL, title=main, xlab=x, ylab=y){
   if(!is.na(main)){
     if(all(data[,main.var]!=main)) print("Warning: title and title.var don't match!")
     data <- data[which(data[,main.var]==main),]
