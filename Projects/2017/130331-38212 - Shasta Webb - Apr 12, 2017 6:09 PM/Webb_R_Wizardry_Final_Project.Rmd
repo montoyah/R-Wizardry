@@ -1,0 +1,380 @@
+---
+title: "R Wizardry Final Project: A Tutorial for Cleaning, Analysing, and Visualising Animal Behaviour Data"
+author: "Shasta Webb"
+date: '2017-04-12'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+***
+
+## Background
+
+Animal behaviour data can take many forms depending on the species, research goals, field settings, and data collection equipment. One common type of animal behaviour data collection aims to measure individual or group activity patterns over a given time, known as an activity budget. In non-human primate research, a common method used to assess activity budget involves group scans [1]. Using a group scan method, a researcher records the activity of an animal group at a consistent interval throughout the study period. Group scans can include as little or as much data as desired. At the very minimum, the general activity of group is recorded. While field sites and researchers differ, many researchers determine that the general activity of the group is the behaviour that the researcher observes in >50% of the animals within sight. To investigate individual differences in activity budget, individual behaviours are recorded as point samples at the time a group scan is taken. After a sufficient period (which is highly dependent on the species) activity budget can be calculated by summing the records in each behavior and dividing by the total number of records for that animal. Activity budgets characterizing an entire species are often broad in nature and only provide a general activity pattern for a species or population. Activity budgets in non-human primates can vary according to season [2] or reproductive status [3] among other factors. Thus, for some research questions it is important to compare activity budgets in response to a change in season, reproductive status, dominance, food availability, among other variables.
+
+#### The Data Set: Capuchins at Santa Rosa
+
+The data set that will be used in this tutorial comes from a population of wild capuchin monkeys at Sector Santa Rosa, a national park located in the Northwestern region of Costa Rica. The data set is based on 6 months of behavioural observations of a population of ~80 monkeys. The full study population consists of 4 social groups of monkeys, which were observed approximately 5 days per month each for 6 months. Group scans were recorded every 30 minutes (at the :00 and :30 of each hour) beginning at 0530 and ending at 1800. 
+
+The raw data set used in this tutorial includes social group, individual animal, date, behavioral state, reproductive state, dominance level, sampling month, and comments. The first part of the tutorial will subset the data to include 6 females that changed reproductive status over the course of the 6-month field season. During this tutorial, we will explore the effects that reproductive status has on certain aspects of monkey activity. Specifically, we will test whether pregnant or lactating monkeys address increased energy costs by (1) resting a greater proportion of their time to conserve energy or (2) foraging for a greater proportion of their time to increase energy intake.
+
+#### Why use R?
+
+R is becoming an increasingly popular analysis and visualisation tool among animal behaviour researchers due to its flexibility in dealing with large, complex datasets and superior visualisation capabilities. In this dataset, we are dealing with repeated measures of behaviour, as well as an extensive set of environemntal variables. R allows for seamless subsetting and inspection of the data, and possesses the power to conduct exploratory analysis, advanced statistical analysis, and professional-grade visualizations in the same platform. 
+
+#### Goals of Tutorial
+
+This tutorial serves as a framework for a data management, basic analysis, and visualization pipeline for animal behaviour data, or other data sets in which study individuals are measured repeatedly. While the data cleaning portion of this tutorial would vary with different data sets, the use of nested `for` loops, the generation of generalized linear mixed models using `glmer` and the visualization of the data serve as multi-use techniques that can apply to a wide range of data sets. It should be noted that the focus of this tutorial is the R code, as opposed to interpretation of results from the tests or data visualization. The data set used is an abridged version, so there exist remaining issues with some of the models. Nevertheless, the tutorial demonstrates a coding framework for cleaning behavioural data, running models, and visualizing data.
+
+## Outline 
+
+This tutorial covers the following topics:
+
+* Installing Packages
+* Reading in Data using `readr`
+* Tidying Messy Data using nested for loops and base R subsetting
+* Creating Generalized Linear Mixed Models using `lme4`
+* Performing Model Comparison using AIC
+* Visualising Data for Publication using `ggplot2`
+
+***
+
+### Setting the Working Directory and Clearing the Environment
+
+Before beginning this tutorial, first set your working directory and remove all objects from your environment.
+
+```{r}
+
+setwd("~/R/R_Wizardry/Final_Project/")
+rm(list=ls(all=T))
+
+```
+
+### Installing and Loading Packages
+
+The following packages will be required to perform this tutorial:
+
+* `readr`
+* `dplyr`
+* `ggplot2`
+* `lme4`
+
+To install packages, type `install.packages("Name of Package")`.
+
+If you alreday have the packages installed, run the following code to load the packages for your current R Studio session. 
+
+```{r}
+
+library(readr) #Readr is a package that enables reading of data into R.
+library(dplyr) #Dplyr is a package that allows for flexible organization and subsetting of data. 
+library(ggplot2) #Ggplot is a package designed to produce publication-quality plots of many types of data.
+library(lme4) #Lme4 is a linear modelling package. In this tutorial, we will generate generalized linear mixed models. 
+library(knitr)
+
+#Notice that when installing packages, you must use quotes around the package name, but when calling packages that are already installed, you do not use quotes.
+```
+
+### Reading in Data using `readr`
+
+```{r}
+raw_iscan = read_csv("Test_R.csv") #Using the read_csv command from readr, you can import spreadsheets in .csv format. 
+
+str(raw_iscan) #The str() function allows you to see what type of data you are dealing with, including columns, numbers of observations, and the types of data in each column. This can be very important in downstream analysis.
+
+raw_iscan
+
+#View(raw_iscan) The View() function provides a visual for your data frame looks like. This can be a way to easily see changes in your data frame as you clean and manipulate your data. This is also an easier way to visualize whether your data is tidy or not.
+```
+
+### Tidying Data 
+
+From using the `View()` function above, we could visually inspect whether our data were tidy or not. When inspecting data for tidiness, you must look at whether there is only one observation per line in your data set. If there is, then your data is already in tidy format. If it is not, then you must tidy it up. Keep in mind that in this context, tidy refers to having one observation per line. It does not necessarily refer to proper headings, preferred order of columns, or other aesthetic aspects of your data. In our case, there appears to be one observation per line. However, there are a couple of other things we need to do to prepare our data for analysis:
+
+1. Subset our data according to the animals we want to analyze.
+2. Remove unnecessary data from our data frame.
+
+
+```{r}
+
+df = raw_iscan[raw_iscan$Animal == "AB" | raw_iscan$Animal == "BO" | raw_iscan$Animal == "SI" | raw_iscan$Animal == "SH" | raw_iscan$Animal == "SS" | raw_iscan$Animal =="TH" , ] #Subset the data using base R subsetting to select the 6 females we want to analyze for this tutorial.
+
+df = within(df, rm("Time", "Date", "Comments")) #Remove columns from the dataframe that we are not using. 
+
+```
+
+Now that we have our dataframe in a cleaner format, we need to figure out how to calculate the values we want. Since we are interested in testing proportions of resting and foraging, we first need to tabulate the total number of scans in each month, per animal. Next, we need to tabulate the number of scans of interest (i.e. resting scans, foraging scans) per animal per sampling month. All this data needs to be stored in our dataframe with columns for Animal, Sampling Month, Reproductive Status, Total Resting Records, Total Foraging Records, Social Group, and Dominance Level.
+
+There are two approaches to this problem. 
+
+*Approach 1: The Bad Approach*
+
+We could create individual data frames subset by each unique animal per unique month, tabulate the data of interest, then concatenate all our "hard-coded" dataframes. 
+
+For example, we could start with animal "BO" and sampling month May, then move to June, July, August, and September. Then we would need to repeat this for every animal, then do it again for our resting records and foraging records. Not only would this take a lot of time, but it would also generate a multitude of dataframes in the environment, which can be difficult to keep organized.
+
+One look at the code below should be enough to dissuade any R student from coding this way!
+
+
+```{r}
+
+df2 = df[df$Animal == "BO" & df$SamplingMonth == "May", ] #Creating a dataframe subsetting "BO" for the month of May.
+
+df2$TotalRecords = length(df2$SamplingMonth) #Creating the column TotalRecords, and populating it by taking the length of sampling month.
+
+df2$TotalRestRecords = length(which(df2$State == "RES" | df2$State == "SRE")) #Creating the column TotalRestRecords by taking the count of all state behaviours that fall under the general category "Resting".
+
+df2$TotalForageRecords = length(which(df2$State == "EFF" | df2$State == "EFI" | df2$State == "FFL" | df2$State == "FFR" | df2$State == "FIN" | df2$State == "FOT" | df2$State ==  "DRI" | df2$State == "VFO")) #Creating the column TotalForageRecords by taking the count of all state behaviours that fall under the general category "Foraing".
+
+df2b = df[df$Animal == "BO" & df$SamplingMonth == "June", ] #From here on out, we repeat the code above, but subset by the same animal for the next month. Using this "hard-coding" method, we would cycle through each animal in each month.
+
+df2b$TotalRecords = length(df2b$SamplingMonth)
+
+df2b$TotalRestRecords = length(which(df2b$State == "RES" | df2b$State == "SRE"))
+
+df2b$TotalForageRecords = length(which(df2b$State == "EFF" | df2b$State == "EFI" | df2b$State == "FFL" | df2b$State == "FFR" | df2b$State == "FIN" | df2b$State == "FOT" | df2b$State ==  "DRI" | df2b$State == "VFO"))
+
+df2c = df[df$Animal == "BO" & df$SamplingMonth == "July", ] 
+
+df2c$TotalRecords = length(df2c$SamplingMonth)
+
+df2c$TotalRestRecords = length(which(df2c$State == "RES" | df2c$State == "SRE"))
+
+df2c$TotalForageRecords = length(which(df2c$State == "EFF" | df2c$State == "EFI" | df2c$State == "FFL" | df2c$State == "FFR" | df2c$State == "FIN" | df2c$State == "FOT" | df2c$State ==  "DRI" | df2c$State == "VFO"))
+
+df2d = df[df$Animal == "BO" & df$SamplingMonth == "August", ] 
+
+df2d$TotalRecords = length(df2d$SamplingMonth)
+
+df2d$TotalRestRecords = length(which(df2d$State == "RES" | df2d$State == "SRE"))
+
+df2d$TotalForageRecords = length(which(df2d$State == "EFF" | df2d$State == "EFI" | df2d$State == "FFL" | df2d$State == "FFR" | df2d$State == "FIN" | df2d$State == "FOT" | df2d$State ==  "DRI" | df2d$State == "VFO"))
+
+df_BO = rbind(df2, df2b, df2c, df2d) #Using rbind() you can concatenate all of the hard-coded dataframes because they all have the same exact columns.
+
+df_BO #Wow! Our data is in the form we want. Now all we need to do is repeat the steps above for every individual, for every month...
+``` 
+
+*Approach 2: The Efficient Approach*
+
+As you cycled through Approach 1, you may have noticed how you were basically looping through each animal/month pair. The method above was using the exact same code for each dataframe, but we were manually typing in each animal and month. Does this sound familiar? In the example above, we were basically acting like a for loop, executing code for our whole dataset by hand. Rather than do it yourself, let R do the busy work. 
+
+Before creating a loop to achieve the results we want, we need to figure out how to set up the loop as well as the location where we want our output from the loop. First, create an empty space for the loop to fill as it cycles through each row in your dataset:
+
+```{r}
+
+df[ , "TotalRecords"] = NA #Creating an empty column for total scans per individual per month
+
+df[ , "TotalRestRecords"] = NA #Creating an empty column for total rest scans per individual per month
+
+df[ , "TotalForageRecords"] = NA #Creating an empty column for total rest scans per individual per month
+
+```
+
+Next, you need to create a `for` loop that performs a task on each unique animal/month pair:
+
+```{r}
+for(a in 1:length(unique(df$Animal))) #Set up the outermost loop by telling R to run through every row from the first row to the last in the "Animal" column.
+  for(m in 1:length(unique(df$SamplingMonth))){ #Set up the inner loop by telling R to run through each unique sampling month (keeping in mind each unique animal).
+                  df[df$Animal == unique(df$Animal)[a] &
+                  df$SamplingMonth == unique(df$SamplingMonth)[m], "TotalRecords"] =
+                  length(which(df$Animal == unique(df$Animal)[a] &
+                  df$SamplingMonth == unique(df$SamplingMonth)[m])) #Fill your "TotalRecords" column by taking the length of the logic statements set up in the 2 for loops.
+                  
+                  df[df$Animal == unique(df$Animal)[a] &
+                  df$SamplingMonth == unique(df$SamplingMonth)[m], "TotalRestRecords"] = 
+                  length(which(df$Animal == unique(df$Animal)[a] &
+                 (df$State == "RES" | df$State == "SRE") &
+                  df$SamplingMonth == unique(df$SamplingMonth)[m])) #Fill your "TotalRestRecords" column by taking the length of the logic statements set up in the 2 for loops INCLUDING information about which behavioural states to count.
+                  
+                  df[df$Animal == unique(df$Animal)[a] &
+                  df$SamplingMonth == unique(df$SamplingMonth)[m], "TotalForageRecords"] =
+                  length(which(df$Animal == unique(df$Animal)[a] &
+                  (df$State == "EFF" | 
+                    df$State == "EFI" | 
+                    df$State == "FFL" | 
+                    df$State == "FFR" | 
+                    df$State == "FIN" | 
+                    df$State == "FOT" | 
+                    df$State == "DRI" | 
+                    df$State == "VFO") &
+                  df$SamplingMonth == unique(df$SamplingMonth)[m])) #Fill your "TotalForageRecords" column by taking the length of the logic statements set up in the 2 for loops INCLUDING information about which behavioural states to count.
+  }
+
+df #Now if you view your dataframe, you will see that R has looped through each unique animal/month pair and tabulated the total records per animal per month, the total rest records per animal per month, and the total foraging records per animal per month.
+```
+
+### Preparing Cleaned Data for Modelling
+
+Now that we have a dataframe complete with the variables we want to include in our models, we need to ensure that we have the data in the correct format. For running GLMMs using the `glmer` fucntion in the lme4 package, we need to make sure there is only one line per animal per month.  
+
+```{r}
+
+df_m = within(df, rm("State"))
+
+df_m = df_m %>%
+            distinct()
+
+df_m
+```
+### Running Generalized Linear Mixed Models
+
+Generalized linear mixed modelling is appropriate for analyzing this data set for several reasons: 
+
+1. The data are not normally distributed.
+2. There exist random effects.
+3. There exist repeated measures of the same individuals.
+
+GLMMs are essentially combinations of linear mixed models, which incorporate random effects, and generalized linear models, which handle nonnormal data. For many types of ecological data, including animal behaviour, GLMMs are an increasingly useful option [4].
+
+There are several packages that facilitate GLMMs in R, but this tutorial uses lme4, a popular package for dealing with this kind of data. Within lme4, there are many linear model function. For this tutorial, we will rely on `glmer` which creates GLMMs.
+
+*Model 1: Resting Model*
+
+This model tests how TotalRestRecords responds to a series of explanatory variables.
+
+
+```{r}
+
+m1 = glmer(TotalRestRecords ~ DominanceLevel + #In many primate species, dominance has an effect on behaviour, so we include it here as a possible explanatory variable.
+                              ReproductiveState + #The variable we are most interested in testing.
+                              DominanceLevel:ReproductiveState + #The interaction between dominance level and reproductive status.
+                              offset(log(TotalRecords)) + #This accounts for our sampling effort. 
+                              (1 | Animal) + #This accounts for our individual.
+                              (0 + ReproductiveState|Animal), #This accounts for the fact that reproductive state can vary in each individual over the course of the study.
+                              data = df_m,
+                              family = poisson) #Our data have a Poisson distribution,
+             
+summary(m1) #Perform a summary for each model. 
+
+null_m1 = glmer(TotalRestRecords ~ offset(log(TotalRecords)) + #In our null model, we take out explanatory variables, but leave in other variables.
+                                  (1 | Animal) +
+                                  (0 + ReproductiveState|Animal),
+                                  data = df_m,
+                                  family = poisson)
+
+summary(null_m1)
+```
+
+*Model 2: The Foraging Model*
+
+This model is set up identical to model 1, except that TotalForageRecords takes the place of TotalRestRecords.
+
+```{r}
+       
+m2 = glmer(TotalForageRecords ~ DominanceLevel +
+                              ReproductiveState +
+                              DominanceLevel:ReproductiveState +
+                              offset(log(TotalRecords)) +
+                              (1 | Animal) +
+                              (0 + ReproductiveState|Animal),
+                              data = df_m,
+                              family = poisson)
+
+summary(m2)
+
+null_m2 = glmer(TotalForageRecords ~ offset(log(TotalRecords)) +
+                                    (1 | Animal) +
+                                    (0 + ReproductiveState|Animal),
+                                    data = df_m,
+                                    family = poisson)
+
+summary(null_m2)
+```
+
+### Model Comparison with AIC
+
+To perform a basic model comparison, use the `AIC()` function.
+
+```{r}
+
+aic = AIC(m1, m2, null_m1, null_m2) #Here we create an object to store our AIC information.
+
+aic
+
+```
+
+The lower an AIC score, the better fit the model is. Models with scores within 2 units are equally fit. As mentioned in the introduction, the models have remaining issues that need to be addressed, including multiple controls.
+
+### Visualising Data for Publication using `ggplot2`
+
+Regardless of significance of data, data visualization is an important part of any research. R is an excellent platform from which to explore data visually, and create publication-quality plots. Below are examples of plots created using the package `ggplot2`. 
+
+Two useful columns missing from our current dataset are a percentage of total activity resting as well as percentage of total activity foraging. To add this data to our dataframe, we need to run the following code:
+ 
+
+```{r}
+
+df_m$RestingPercent = round(df_m$TotalRestRecords/df_m$TotalRecords * 100) #Calculate percentage of activity budget resting by dividing the TotalRestRecords column by the TotalRecords column and multiplying by 100. They use the round() function to round to the nearest whole number. By creating the object df_m$RestingPercent, you are automatically adding a column to the df_m dataframe.
+
+df_m$ForagingPercent = round(df_m$TotalForageRecords/df_m$TotalRecords * 100) #Do the same to calculate percentage of activity budget foraging. 
+
+```
+
+First, we will create a point plot to visualize our resting data.
+
+```{r}
+
+df_m$SamplingMonth = factor(df_m$SamplingMonth, levels = month.name) #We need to convert SamplingMonth in our dataframe to a factor with levels according to normal order of months. Otherwise, R will sort the names of months alphabetically. 
+
+plot1 = ggplot(data = df_m, aes(x = SamplingMonth, y = RestingPercent)) #Create a ggplot() object by designating the dataset you want to use. Then use the aes (aesthetics) function to designate the data you want on the x and y axes.
+
+point_plot_resting = plot1 +
+                geom_point(aes(color = ReproductiveState), size = 4) + #Add layers of information to your plot by designatin a geom. In our case we use geom_point for point plots
+                labs(title = "Resting Percentage in Female Capuchins", #Customize your title and labels
+                     x = "Sampling Month", y = "% of Activity Budget Spent Resting") +
+                theme(plot.title = element_text(color = "black", family = "Arial", face = "italic", #Use themes to further customize your figures
+                                                size = 17, hjust = 0.5, vjust = 1)) +
+                theme(axis.title.x = element_text(color = "black", family = "Arial", face = "italic",
+                                                size = 12)) +
+                theme(axis.title.y = element_text(color = "black", family = "Arial", face = "italic",
+                                                size = 12)) +
+                theme(legend.position = "bottom", legend.direction = "horizontal") +
+                facet_wrap(~ Animal) #Use facet_wrap to provide more clarity to your data. In this case we are separating facets according to Animal so that we can visually compare foraging rates between females in different reproductive states
+
+point_plot_resting
+```
+
+```{r}
+
+plot2 = ggplot(data = df_m, aes(x = SamplingMonth, y = ForagingPercent))
+
+point_plot_forage = plot2 +
+                geom_point(aes(color = ReproductiveState), size = 4) +
+                labs(title = "Foraging Percentage in Female Capuchins", 
+                     x = "Sampling Month", y = "% of Activity Budget Spent Foraging") +
+                theme(plot.title = element_text(color = "black", family = "Arial", 
+                                                face = "italic", size = 17, hjust = 0.5, vjust = 1)) +
+                theme(axis.title.x = element_text(color = "black", family = "Arial", 
+                                                face = "italic", size = 12)) +
+                theme(axis.title.y = element_text(color = "black", family = "Arial", 
+                                                face = "italic", size = 12)) +
+                theme(legend.position = "bottom", legend.direction = "horizontal") +
+                facet_wrap(~ Animal)
+
+point_plot_forage
+```
+
+### Conclusion
+
+This tutorial is designed to provide a basic pipeline for cleaning data (specifically demonstrating the utility of nested looping), basic analysis options for non-normal behavioural data, and the utility of `ggplot` as a tool for visualizing data. This framework could be applied to many forms of ecological data, but would work best with scan sampling. 
+
+### Works Cited
+
+1. Altmann J. 1974. Observational study of behavior: sampling methods. Behaviour 49:227–266. 
+
+2. Campos FA, Fedigan LM. 2009. Behavioral adaptations to heat stress and water scarcity in white‐faced capuchins (Cebus capucinus) in Santa Rosa National Park, Costa Rica. American Journal of Physical Anthropology 138:101–111. 
+
+3. Amato KR, Leigh SR, Kent A, et al. 2014. The role of gut microbes in satisfying the nutritional demands of adult and juvenile wild, black howler monkeys (Alouatta pigra). American Journal of Physical Anthropology 155:652–664. 
+
+4. Bolker BM, Brooks ME, Clark CJ, et al. 2009. Generalized linear mixed models: a practical guide for ecology and evolution. Trends in Ecology & Evolution 24:127–135.
+ 
+
+```{r}
+sessionInfo()
+```
+
+
+

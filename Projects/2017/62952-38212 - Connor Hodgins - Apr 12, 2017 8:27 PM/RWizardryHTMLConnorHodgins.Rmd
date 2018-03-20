@@ -1,0 +1,213 @@
+---
+title: "CRISPRseek"
+author: "Connor Hodgins"
+date: "April 3, 2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE}
+rm(list=ls(all=TRUE))
+```
+
+# *CRISPRseek*: A tool for designing sgRNA's for CRISPR-Cas systems
+
+Sequence specific genomic modification techniques have become increasingly important in genetic engineering. They allow the researcher to precisely target genes of interest for deletion or for precise insertion of trans-genes.  Zinc-finger endonucleases (ZNF) and transcription activator like endonucleases (TALEN) have traditionally been used for sequence specific genomic modifications. Despite the availability of protocols for ZNF and TALEN system the substantial time requirement for design has lead to these techniques being replaced with CRISPR Cas systems (Ran et al., 2013b). CRISPR Cas use single stranded guide RNA's (sgRNA) to make targeted double stranded breaks in DNA which is complementary to the sgRNA. The advantage of this system is the ease of designing sgRNA's to target specific genomic sequences (Ran et al., 2013b). 
+
+CRISPR Cas systems are derived from the innate immune system of some prokaryotes which contain clustered regularly interspersed palindromic repeat (CRISPR) sequences in their genomes which generate sgRNA's that can guide CRISPR associated nucleases (Cas) to cleave foreign DNA (Hsu et al., 2013).  In nature, the sgRNA is bound to a structural tracer RNA (tRNA) which acts as scaffold to allow the Cas protein to bind to the sgRNA so that it can be guided to the target DNA sequence. The target DNA sequence must be complementary to the sgRNA and have a protospacer adjacent motif (PAM) sequence directly adjacent to it. The length of the sgRNA and the PAM sequence are species specific. The most commonly used Cas protein, Cas9, is derived from *Streptococcus pyogenes* and uses sgRNA that are 20 nucleotides along with a 5'-AGG PAM sequence (Hsu et al., 2013).
+
+Researchers have taken advantage of this defense system and now use many different sgRNA-Cas systems to genetically modify model and non-model organisms. These modificatiosn are made by the Cas proteins which make double stranded breaks in the genome that can generate small insertion/deletion mutations by non-homologous end joining or sequence specific insertions of donor DNA by homologous recombination (Zhu et al., 2014). Systems such as yeast have been shown to be readily modifiable using this system as they use recombination mechanisms to repair damaged DNA (DiCarlo et al., 2013). This allows for greater degrees of modification than possible using traditional vector based transformation. Despite the advantages of CRISPR Cas9 there are also potential drawbacks such as off-target deletions caused by sgRNA's which are specific for more than one region of the genome (Zhu et al., 2014). This can be an issue if the off-target occurs in an exon of another gene. For this reason, it is important to carefully design sgRNA's which are specific for the gene that you want the deletion to occur in.
+
+The Bioconductor package *CRISPRseek* is a powerful tool which can be used for designing sgRNA's (Zhu et al., 2014). *CRISPRseek* not only finds potential sgRNA's in the gene of interest but it also looks for off-target sites throughout the genome. Careful selection of sgRNA's can help to minimize these off-target effects. Another strategy to reduce off-target effects is using a paired sgRNA and CRISPR-nickase system to generate two nicks on opposite strands of DNA (Ran et al., 2013a).  *CRISPRseek* can also select sgRNA's which occur at different restriction enzyme sites that can then be used as a control when experimentally determining the quality the sgRNA cleavage (Zhu et al., 2014). The length of the sgRNA's as well as the PAM sequence which they use can be adjusted for different Cas proteins. For example, the Cpf1 protein which has recently been used in place of Cas9 requires a 5'TTTN- PAM sequence and an sgRNA that is 31 nucleotides long. *CRISPRseek* allows the user to keep pace with advancements made in this field (Zetsche et al., 2015). There are web based services that also exist for finding sgRNA's and determining their off-target effects but these are not as customizable as *CRISPRseek*. The customizability of *CRISPRseek* is an important feature because of the rapid rate of development around CRISPR Cas techniques. As new developments in the field are made the parameters of *CRISPRseek* can be modified to take these into consideration.
+
+### Getting started with *CRISPRseek*
+
+  Several other packages are required in order to use *CRISPRseek*. The packages that are required are dependent on the organism which will be used in further experiments. The package *BSgenome* provides genomic sequences for a variety of different organisms. *BSgenome* contains genomic sequences in a *Biostrings* package format and therefore requires the *Biostrings* package. Each *BSgenome* package contains similar information and are formatted in a specific way which makes them easier to work with. *CRISPRseek* requires genomic sequences in this format.
+
+We need to first download the *Biostrings* and *BSgenome* packages.
+```{r, eval=FALSE}
+source("https://bioconductor.org/biocLite.R")
+biocLite("Biostrings")
+library("Biostrings")
+biocLite("BSgenome")
+library("BSgenome")
+
+### Set your working directory for later
+setwd("C:/Users/Connor Hodgins/Documents/GraduateStudies/Classes/CMMB607/Final Project")
+```
+
+In order to check the availability of genomes for different organisms the available.genome function can be run.
+```{r, eval=FALSE}
+available.genomes()
+```
+
+  Now the genome that you want to use can be selected. Each BSgenome data package has a name with four parts which are consistently formatted. The first part is BSgenome. The second part is an abbreviated name for the organism with the first letter of the genus capitalized followed by the full species name in lower case letters. The third part is the name of the organization which provided the genomic sequence. The fourth part is the number used by the organization which developed the particular genome assembly.
+
+```{r, eval=FALSE}
+### In this example I will use the yeast (Saccharomyces cerevisiae) genome
+biocLite("BSgenome.Scerevisiae.UCSC.sacCer3")
+library("BSgenome.Scerevisiae.UCSC.sacCer3")
+ygenome <- getBSgenome("BSgenome.Scerevisiae.UCSC.sacCer3")
+
+```
+
+In order to recall the genomes which have already been installed the *installed.genome* function can be used. 
+
+```{r, eval=FALSE}
+installed.genomes()
+```
+
+  To incorporate information such as the 5' and 3' untranslated regions, protein coding sequences and exons from mRNA transcripts into our genome sequence, TxDb objects must be used. The *GenomicFeatures* packages uses TxDb objects in order to store this type of information. To find TxDb objects which already exist search for annotation packages which start with TxDb at http://www.bioconductor.org/packages/release/BiocViews.html.
+
+```{r, eval=FALSE}
+### The GenomicFeatures package is required.
+
+biocLite("GenomicFeatures")
+library("GenomicFeatures")
+
+### Download the TxDb file which corresponds to the BSgenome that you downloaded in the last step.
+
+biocLite("TxDb.Scerevisiae.UCSC.sacCer3.sgdGene")
+library("TxDb.Scerevisiae.UCSC.sacCer3.sgdGene")
+```
+
+In order to show the contents of the package which are loaded into memory use the *ls()* function.
+```{r, eval=FALSE}
+ls('package:TxDb.Scerevisiae.UCSC.sacCer3.sgdGene')
+```
+
+  *OrgDb* packages include genomic annotations and are also required for *CRISPRseek*. *OrgDb* packages that are available can be found by searching for packages which start with OrgDb at http://www.bioconductor.org/packages/release/BiocViews.html.
+
+```{r, eval=FALSE}
+### Download the OrgDb package which corresponds to the BSgenome and TxDb packages which you used earlier.
+biocLite("org.Sc.sgd.db")
+library("org.Sc.sgd.db")
+```
+
+  We can now use *CRISPRseek* to search for sgRNA's for the gene of interest and search the genome for other off-target effects. First we need to collect the *CRISPRseek* package and set up some parameters that we will use in each scenario presented. The argument *inputFilePath* is used to store the DNA sequence of your gene of interest and the *format* argument is used to indicate the format of the input file. The default for *format* is fasta so if your *inputFilePath* argument is already in fasta you do not need this argument. *CRISPRseek* will use the *inputFilePath* argument to generate candidate sgRNA's.
+  
+```{r, eval=FALSE}
+### Install CRISPRseek
+biocLite("CRISPRseek", repos= "https://bioconductor.org/biocLite.R")
+library("CRISPRseek")
+inputFilePath <- inputFilePath
+outputDir <- getwd()
+```
+
+  Searching for sgRNA's which are on or near restriction enzyme sites can be a control to see whether or not Cas cleavage was successful. Included in the *CRISPRseek* package is a set of restriction enzymes including their recognition sites from a commercial supplier. 
+  
+```{r, eval=FALSE}
+### This will allow you to access the list of restriction sites which came with CRISPRseek
+REpatternFile <- system.file('extdata', 'NEBenzymes.fa', package = 'CRISPRseek')
+```
+
+### Tutorials
+
+  Three different common scenarios which require different parameters to generate sgRNA's will be discussed. The first scenario is to find non-paired sgRNA's which occur on different restriction enzyme sites and to see if any of these sgRNA's have off-target effects. The default CRISPR-Cas system in *CRISPRseek* is the Cas9 nuclease from *Streptococcus pyogenes*. Cas9 requires sgRNA's which are 20 nucleotides long and has an AGG PAM sequence. These are set as the default in *CRISPRseek* so nothing will need to be adjusted. The chromosomes which will be searched for off-target effects can be specified using the *chromToSearch* argument. The default for this argument is for all of the chromosomes to be searched but in this example only "chromosome XVI" will be used in order to reduce the search time. The *max.mismatch* argument is to specify how many nucleotides can differ between the sgRNA and off-target site. Based on the literature for the organism which is being examined this number should be adjusted.
+  
+```{r, eval=FALSE}
+results1 <- offTargetAnalysis(
+        inputFilePath = inputFilePath ,
+        gRNAoutputName = "gRNABts1" ,
+        findgRNAsWithREcutOnly=TRUE ,
+        REpatternFile = REpatternFile,
+        BSgenomeName= ygenome ,
+        chromToSearch = "chrXVI",
+        max.mismatch = 2 ,
+        txdb= TxDb.Scerevisiae.UCSC.sacCer3.sgdGene , 
+        orgAnn = "org.Sc.eg.db", 
+        outputDir = outputDir)
+
+```
+
+ The second scenario is to search for paired sgRNA's which occur on restriction enzyme sites. Paired sgRNA's help to reduce off-target effects. In order for the paired sgRNA's to work a modified Cas9 nickase mutant is used which makes a single stranded nick at the sgRNA site (Ann Rann et al., 2013). With the two sgRNA's running in opposite directions the nicks will occur on both sides of the genomic DNA essentially generating a double stranded break. By utilizing two sgRNA's the risk of off-target cleavage is greatly reduced as both sgRNA's will need to bind close together in order for any double stranded breaks to occur. In order to find paired sgRNA's the argument *findPariedgRNAOnly* must be set to "TRUE". *CRISPRseek* uses the arguments *min.gap* and *max.gap* to set the minimum and maximum distances, respectively, between the paired sgRNA bind sites. These distances can be optimized based on the literature to get the best chance of making a deletion. 
+
+```{r, eval=FALSE}
+results2 <- offTargetAnalysis(
+        inputFilePath = inputFilePath,
+        gRNAoutputName = "gRNABts1" ,
+        findgRNAsWithREcutOnly=TRUE ,
+        REpatternFile = REpatternFile,
+        findPairedgRNAOnly=TRUE , 
+        annotatePaired = TRUE,
+        max.gap = 10,
+        BSgenomeName= ygenome ,
+        chromToSearch = "chrXVI",
+        max.mismatch = 2 ,
+        txdb= TxDb.Scerevisiae.UCSC.sacCer3.sgdGene , 
+        orgAnn = "org.Sc.eg.db", 
+        outputDir = outputDir)
+```
+
+ The final scenario which will be covered is the use of a relatively new CRISPR-Cas system called Cpf1. Cpf1 is derived from Prevotella and Francisella bacteria (Zetsche et al., 2015). It has several advantages over Cas9 in that it requires a shorter sgRNA-tRNA complex making direct synthesis of these genes cheaper and it produces sticky ends instead of blunt ends making donor DNA insertion more likely. The sgRNA of Cpf1 uses 31 nucleotides instead of 20 nucleotides like Cas9. The *gRNA.size* argument should be adjusted to 31 for Cpf1. In addition to this it utilizes a 5'-TTTN PAM sequence (Zetsche et al., 2015). This T rich PAM sequence makes Cpf1 more useful than Cas9 in genomes which are particularly T rich. The argument *PAM* should be adjusted to "TTTN" so that the sgRNA's have this as their new PAM sequence. *PAM.pattern* should be adjusted to "TTTN" as well so that the off-target sites also contain the Cpf1 PAM site. The default scoring method used in *CRISPRseek* is Hsu-Zhang but this method was desgined for Cas9. The scoring method needs to be changed in the argument *scoring.method* to "CFDscroe". The argument *subPAM.position* should be set to "c(1,2)" in order to utilize Cpf1. The PAM site for Cpf1 occurs on the 5' end of the sgRNA so the argument *PAM.location* should be set to "5prime".
+
+```{r, eval=FALSE}
+results3 <- offTargetAnalysis(
+        inputFilePath = inputFilePath,
+        gRNAoutputName = "gRNABts1" ,
+        findgRNAsWithREcutOnly=TRUE ,
+        REpatternFile = REpatternFile,
+        findPairedgRNAOnly=TRUE , 
+        annotatePaired = TRUE,
+        max.gap = 10,
+        PAM.size = 4,
+        gRNA.size = 31,
+        PAM = "TTTN", 
+        BSgenomeName= ygenome ,
+        chromToSearch = "chrXVI",
+        max.mismatch = 3 ,
+        PAM.pattern = "^TTTN",
+        txdb= TxDb.Scerevisiae.UCSC.sacCer3.sgdGene , 
+        orgAnn = "org.Sc.eg.db", 
+        outputDir = outputDir,
+        scoring.method = "CFDscore",
+        subPAM.position = c(1,2),
+        PAM.location = "5prime")
+```
+
+### Interpreting the results
+
+  Running *offTargetAnalysis* will create six different files the location of which will be based on the *outputDir* argument which was used. The first two files will be the sgRNA's which were made for the gene of interest in the *inputFilePath* argument. The files contain the same information but are saved in fasta or bed formats. The next four files are all in .xls format.
+  
+#### OfftargetAnalysis
+  The OfftargetAnalysis file gives information on the off-target sites which each sgRNA generated may cleave. The location of the off-target site is given in the chromosome as well as whether or not it occurs in an intron or exon and whether it is on the positive or negative strand. *CRISPRseek* scores each sgRNA out of 100 with a score of 100 meaning that the sgRNA will cut the site as well as predicted and 0 meaning that no cutting will occur.
+  
+#### PairedgRNA
+  The PairedgRNA file matches the different sgRNA's with their paired sgRNA on the opposite strand based on the parameters which were defined in the *offTargetAnalysis*.
+  
+#### REcutDetails
+  The REcutDetails file highlights the different restriction enzymes that will cut the sgRNA's. It includes the restriction pattern and the location of each cut on the sgRNA of both strands.
+
+#### Summary
+  The summary file ranks each sgRNA based on their off-target score. It also breaks down their total off-target score based on the distance of the off-target site from the intended cut site. The restriction enzyme information from the REcutDetails can also be found here. 
+
+### Appendix 1: Session info
+
+```{r}
+sessionInfo()
+```
+
+### Appendix 2: Literature cited
+
+DiCarlo, J.E., Norville, J.E., Mali, P., Rios, X., Aach, J., and Church, G.M. (2013). Genome engineering in Saccharomyces cerevisiae using CRISPR-Cas systems. Nucleic Acids Research 41, 4336-4343.
+
+Hsu, P.D., Scott, D.A., Weinstein, J.A., Ran, F.A., Konermann, S., Agarwala, V., Li, Y., Fine, E.J., Wu, X., Shalem, O., et al. (2013). DNA targeting specificity of RNA-guided Cas9 nucleases. Nature biotechnology 31, 827-832.
+
+Ran, F.A., Hsu, P.D., Lin, C.-Y., Gootenberg, J.S., Konermann, S., Trevino, A., Scott, D.A., Inoue, A., Matoba, S., Zhang, Y., et al. (2013a). Double nicking by RNA-guided CRISPR Cas9 for enhanced genome editing specificity. Cell 154, 1380-1389.
+
+Ran, F.A., Hsu, P.D., Wright, J., Agarwala, V., Scott, D.A., and Zhang, F. (2013b). Genome engineering using the CRISPR-Cas9 system. Nature protocols 8, 2281-2308.
+
+Zetsche, B., Gootenberg, Jonathan S., Abudayyeh, Omar O., Slaymaker, Ian M., Makarova, Kira S., Essletzbichler, P., Volz, Sara E., Joung, J., van der Oost, J., Regev, A., et al. (2015). Cpf1 Is a Single RNA-Guided Endonuclease of a Class 2 CRISPR-Cas System. Cell 163, 759-771.
+
+Zhu, L.J., Holmes, B.R., Aronin, N., and Brodsky, M.H. (2014). CRISPRseek: A Bioconductor Package to Identify Target-Specific Guide RNAs for CRISPR-Cas9 Genome-Editing Systems. PLoS ONE 9, e108424.
+
+
+
+
+
+

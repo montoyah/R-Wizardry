@@ -1,0 +1,606 @@
+---
+title: "rMetabolomics - an R Project for Data Processing and Statistical Analysis of Metabolomics Datasets"
+author: "Sayed Metwaly MD, MSc, PhD student"
+date: "March 18, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(rgl)
+knit_hooks$set(webgl = hook_webgl)
+```
+
+
+<br>
+<br>
+
+# Introduction
+
+### What and Why?
+**rMetabolomics** is	an	R	Markdown	project	I	made	specifically	to	perform	data	processing and	statistical	analysis	of	metabolomics	data.	Most	of	the	popular	statistical	software	packages	perform	data	procssing/analysis	on	a	single	metabolite	at	a	time	with	limited	capability	to	do	batch	processing/analysis	thus	they	are	of	limited	benefit	when	handling	metabolomics	data.	There	are	some	online	tools	dedicated	for	the	purpose	of	metabolomics	data	analysis	but	issues	with	internet	connectivity	and	service	run	down	during	
+maintenance	times	limit	their	reliability.	
+
+### Requirements
+I	programmed	**rMetabolomics**	to	be	fully	automated,	the	only	required	input	is	the	name	of	the	dataset	file.	Right	now	only	CSV	files	are	accepted.	Dataset	must	comply	with	the	generally	accepted	metabolomics	data	configuration:	metabolites	in	columns,	samples	in	rows	and	first	2	columns	contain	sample	ID	and	class	respectively.	Currently	rMetabolomics	can	process	2	classes	only	(e.g.	disease	vs	control,	survivors	vs	non-
+survivors	...	etc.).	
+
+### Structure
+The code of **rMetabolomics** is organized in 3 parts: starting, data processing and data analysis. Each part is composed of sections called "modules" which carry out specific tasks. Modules are connected and depend on each other. I added comments to explain what is the task of the module and how the code works.
+
+### Future plans
+I	am	planning	to	include	analysis	of	variance	(ANOVA),	principal	component	analysis	(PCA),	partial	least	square	discriminant	analysis	(PLS-DA)	and	orthogonal	partial	least	square	discriminant	analysis	(oPLS-DA)	are	in	future	versions	of	rMetabolomics.	Importantly,	I	am	planning	to	make	next	versions	able	to	automatically run	the	optimal	statistical	test	based	on	the	data	entered.	
+
+*** 
+
+
+<br>
+<br>
+
+# Part1: Let's get started!
+This part does initialization and loads necessary custom functions.
+
+<br>
+
+### 1.1 Initialization module
+Here we specify the dataset file. This module does not produce any output, it just loads the dataset and required packages.
+
+```{r Initialization Module, echo=TRUE} 
+#Initialization Module: loads dataset and the required packages.
+
+#Clear R environment.
+rm(list=ls(all=TRUE))
+
+#load the dataset from a csv file. 
+#Note: CSV file layout must comply with generally acceptable metabolomics dataset structure (1st column: samples ID, 2nd column: class/sample type, samples in rows and metabolites in columns) 
+rawDataset <-read.csv("C:/Users/metwa/Medicine/Study/Canada/Calgary/Courses, Workshops, Seminars/11 R Wizardry/Final Project/example_dataset_oxylipins_raw.csv", header=TRUE, sep=",", check.names=FALSE, stringsAsFactors=TRUE, comment.char="")
+
+#Load required packages
+library("ggplot2")
+library("reshape2")
+library("plyr")
+library("scales")
+library("gridExtra")
+library("grid")
+library("gtable")
+library("pwr")
+library("plot3D")
+library("rgl")
+library("plot3Drgl")
+
+
+```
+
+<br>
+
+### 1.2 Graphics module
+This module contains 3 custom made graphics functions (matrixPlot, matrixCompare and drawTable). Functions in this modules are used throughout the rest of rMetabolomics.
+
+```{r Graphics Module, echo=TRUE} 
+#Graphics module contains custom  plotting functions used throughout the project.
+
+
+#-------------------------------------------Function matrixPlot----------------------------------------------- 
+# Custom function to do boxploting for an entire matrix
+# Inputs: numeric matrix, title, x axis label, y axis label,boxplot orientation
+matrixPlot<-function(data_mat , title="",x_lab="", y_lab="" , boxplot_orient="v" ){
+ 
+
+meltData <- melt(data_mat) #converts data_mat into long format
+x<-factor(meltData[,2])
+y<-meltData[,3]
+
+p <- ggplot(meltData, aes(x,y, fill=x ))#Initialize the plot
+
+
+if (boxplot_orient=="h") { #Horizontal orientation of boxplots
+  p + geom_boxplot(color="black",position = "dodge" )+ 
+  coord_flip()+
+  theme(legend.position="none", axis.ticks = element_blank(), axis.text.x = element_blank(), axis.text.y  = element_text(angle=0, vjust=0.5, size=6,face="bold"))+
+  labs(title=title,x=x_lab, y = y_lab) 
+  
+} else { #Vertical orientation of boxplots
+ p + geom_boxplot(color="black",position = "dodge" )+ 
+  theme(legend.position="none", axis.ticks = element_blank(), axis.text.y = element_blank(), axis.text.x  = element_text(angle=90, hjust=0.5, size=6,face="bold"))+
+  labs(title=title,x=x_lab, y = y_lab)   
+}
+
+}#------------------------------------------------------------------------------------------------------------
+
+
+#-------------------------------------------Function matrixCompare-------------------------------------------- 
+# Custom function to compare an the mean value of 2 matrices
+# Inputs: 2 numeric matrices, 2 titles
+matrixCompare<-function(mat1 , mat2, mat1_title="",mat2_title="" ){
+ 
+# set graphics window to plot side by side
+layout(matrix(c(1,1,2,2), 2, 2, byrow = TRUE))  
+par(mfrow = c(1,2), mai=c(1,1,1,0))
+
+#replace all non-numeric data with 0
+mat1[which(is.numeric(mat1)==FALSE)] <- 0 
+mat2[which(is.numeric(mat2)==FALSE)] <- 0
+
+#Plot the denisty of the mean of each column (metabolite) for the 2 numeric matrices
+plot(density(apply(mat1, 2, mean), na.rm = TRUE), main=mat1_title)
+plot(density(apply(mat2, 2, mean), na.rm = TRUE), main=mat2_title)
+  
+}#------------------------------------------------------------------------------------------------------------
+
+
+
+#-------------------------------------------Function drawTable------------------------------------------------ 
+# Custom function to draw graphic tables
+# Inputs: matrix, title, footer, title text size, footer font face
+drawTable<-function(d , title_txt="", footer_txt="", title_txt_size=20,footer_fontface="plain" ){
+
+table <- tableGrob(d) #Initialize the table
+
+#Initialize table title and footer
+title <- textGrob(title_txt,gp=gpar(fontsize=title_txt_size))
+footnote <- textGrob(footer_txt, x=0, hjust=0,
+                     gp=gpar( fontface=footer_fontface))
+
+padding <- unit(1,"line")#Sets the distance between elements
+
+#Draw table + title
+table <- gtable_add_rows(table, 
+                         heights = grobHeight(title) + padding,
+                         pos = 0)
+#Adds footnote
+table <- gtable_add_rows(table, 
+                         heights = grobHeight(footnote)+ padding)
+
+#Sets the alignment of title and footer
+table <- gtable_add_grob(table, list(title, footnote),
+                         t=c(1, nrow(table)), l=c(1,1), 
+                         r=ncol(table))
+
+#Plot the complete table
+grid.newpage()
+grid.draw(table)
+}#------------------------------------------------------------------------------------------------------------
+
+
+```
+
+*** 
+
+<br>
+
+# Part2: Data Processing
+Data processing consists of plotting, normalization, transformation and scaling of data.
+
+<br>
+
+
+### 2.1 Plot Raw Data
+After	entering	the	dataset	file	name	rMetabolomics	will	Load	dataset	and	plot	raw	data.	
+```{r raw Data, echo=TRUE}
+
+numericData<-data.matrix(rawDataset[,3:ncol(rawDataset)]) #Excludes the primary ID and sample type columns
+
+matrixPlot(data_mat=numericData , title="Raw Data",x_lab="", y_lab="" , boxplot_orient="v")#Plot the numeric data
+
+```
+
+### 2.2 Normalization
+Typically	metabolomics	samples	show	high	variability	in	concentration,	and	the	derived	metabolic	profiles	have	a	heteroscedastic	noise	structure	characterized	by	increasing	variance	as	a	function	of	increased	signal	intensity.	These	sources	of	experimental	and	instrumental	noise	substantially	complicate	information	recovery	when	statistical	tools	are	used.	Median	fold	change	normalization	is	least	compromised	by	the	biologically	relevant	changes	in	mixture	components	and	is	thus	preferable	normalization	method.	
+```{r Median Fold Change Normalizatio, echo=TRUE}
+
+#-------------------------------------------Function MDFCN---------------------------------------------------- 
+# Custom function to perform median fold change normalisation
+# Inputs: numeric matrix
+# Priniple: calculates median of the rows --> divide each cell by its row median --> calcuate columns median --> divide each cell by the column median
+
+MDFCN <- function(mat) {
+
+  #Replace any non-numeric values in the dataset with 0
+  mat[which(is.numeric(mat)==FALSE)] <- 0 
+  
+  #Calculates median of the rows of the input matrix and store them in the vector medSam
+  medSam <- apply(mat, 1, median)
+  medSam[which(medSam==0)] <- 0.0001 #Replace any median 0 with 0.0001 (to avoid divide by zero later on)
+  
+  #Divide cells by the its respective row median, calculates  columns median and divide each cell by the column median
+  mat <- apply(mat, 2, function(mat, medSam){
+    medFDiSmpl <- mat/medSam
+    vec<-mat/median(medFDiSmpl)
+    return(vec)
+  }, medSam)
+
+  return (mat)
+}#------------------------------------------------------------------------------------------------------------
+
+numericData.normalized<-MDFCN(numericData) #Call MDFCN function to normalize numericData
+
+#Plot the normalized data
+matrixPlot(data_mat=numericData.normalized , title="Data After Median Fold Change Normalization (MDFCN)",x_lab="", y_lab="" , boxplot_orient="v")
+
+
+```
+
+
+### 2.3 Data Transformation 
+Logarithmic	transformation	of	data	is	usually	required	given	the	highly	skewed	nature	of	the	metabolomics	results.	**rMetabolomics**	will	do	base	10	logarithmic	transformation	and	plot	transformed	data.	
+```{r Log_Transformation, echo=TRUE}
+
+numericData.log<-log10(numericData.normalized)#perform log transformation to the data
+
+#plot the transformed data
+matrixPlot(data_mat=numericData.log , title="Data After Base 10 Log Transformation",x_lab="", y_lab="" , boxplot_orient="v")
+
+```
+
+### 2.4 Data Scaling
+Data	scaling	aims	to	centralize	the	data	based	on	the	mean	of	each	metabolite.	It	is	commonly	the	final	step	in	data	processing	before	statistical	analysis	is	performed.	**rMetabolomics**	will	do	z	scaling	and	plot	scaled	data.	
+```{r zScalling, echo=TRUE}
+
+#----------------------------------------------Function zScale------------------------------------------------
+# Calculates z_score, formula: (x-u)/sd
+# inputs: a numeric matrix
+zScale<-function (num_mat){
+  
+  #Replace any non-numeric values in the dataset with 0
+  num_mat[which(is.numeric(num_mat)==FALSE)] <- 0 
+  
+  
+  #Subtracts the column mean from each cell and divide the result by the column sd
+  num_mat <- apply(num_mat, 2, function(num_mat){
+  
+  #Calculates mean of the columns of the input matrix and store them in the vector meanCol
+  meanCol<-mean(num_mat)
+  
+  #Calculates sd of the columns of the input matrix and store them in the vector sdCol
+  sdCol <- sd(num_mat)
+  sdCol[which(sdCol==0)] <- 0.0001 #Replace any mean 0 with 0.0001 (to avoid divide by zero later on)
+  
+    num_mat <- num_mat-meanCol
+    num_mat<-num_mat/sdCol
+    return(num_mat)
+  })
+
+return(num_mat)
+}#------------------------------------------------------------------------------------------------------------
+
+numericData.z<-zScale(numericData.log)#Call zScale function to normalize numericData.log
+
+#Plot z-scaled data
+matrixPlot(data_mat=numericData.z , title="Data After z Scalling",x_lab="", y_lab="" , boxplot_orient="v")
+
+processedDataset <- cbind(rawDataset[,1:2],numericData.z)#saves the final processed data: composed of first 2 columns of the raw data (sample ID and Class) and processed numeric matrix
+
+```
+
+<br>
+
+### 2.5 Data Processing Summary
+As	a	final	step	in	data	processing,	**rMetabolomics**	will	provide	an overal	visual	reprsentation	of	the	data	before	and	after	processing.	
+```{r before_after_plot, echo=TRUE}
+
+#Calls matrixCompare function to compare between raw data and processed data
+matrixCompare(numericData , numericData.z, mat1_title="Raw Data",mat2_title="Data After Processing" )
+
+```
+
+*** 
+
+<br>
+
+# Part3: Statistical Analysis
+In this part **rMetabolomics** will do univariate statistical analysis of the processed data. Analysis consists of doing correlation matrix, heatmap, t-test, sample size calculation and **"Power Array"**
+
+<br>
+
+
+### 3.1 Correlation Matrix
+Correlation	matrix	provides	an	overview	of	the	correlation	between	all	metabolites.	Spearman	correlation	is	preferentially	selected	given	the	skewed	nature	of	most	metabolomics	data.	I	programmed	**rMetabolomics**	to	automatically	do	a	correlation	matrix	(Spearman	correlation)	for	all	metabolites	and	plot	the	result.	
+```{r corMatrix, echo=TRUE}
+
+#----------------------------------------Function corSpearman--------------------------------------------------
+#Plots a Spearman Correlation Matrix using using qplot
+#Inputs: processed numeric data matrix (normalized, transformed and scaled data)
+corSpearman<-function (processed_mat){
+
+#perform spearman correlation and convert the output matrix into the long format
+data=melt(cor(processed_mat, method="spearman"))
+
+#Plots the output matrix
+qplot(x=data[,1], y=data[,2], data=data, fill=value, geom="tile") + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+ theme(axis.title.x=element_blank(), axis.title.y=element_blank())+ 
+  scale_fill_gradient(low="#000433", high="#62c3f6")+
+  guides(fill = guide_legend(title = "Spearman Correlation Coeff." ))
+}#-------------------------------------------------------------------------------------------------------------
+
+corSpearman(numericData.z)
+
+```
+
+
+<br>
+
+
+### 3.2 Heatmap
+Heatmap	provides	an	intuitive	way	to	evaluate	the	dataset.	I	programmed	**rMetabolomics** to	rearrange	the	samples	based	on	the	sample	type/class.	Then	sample	type	indicator	is	plotted	in	the	first	column	of	the	heatmap.	As	a	general	rule,	the	more	a	metabolite	column	shows	agreement	with	the	first	column	(sample	type indicator)	in	the	heatmap,	the	more	it	can	be	used	to	separate	between	sample	classes.	
+```{r heatmap, echo=TRUE}
+
+#-----------------------------------------------Function ggHeatmap--------------------------------------------
+#Plots a heatmap of the dataset
+#Inputs: processed numeric data matrix (normalized, transformed and scaled data)
+ggHeatmap<-function (processed_dataset){
+
+gg_heatmap_mat<-processed_dataset
+gg_heatmap_mat[,2]<-as.numeric(as.factor(gg_heatmap_mat[,2]))#convert sample type into factor then into number
+
+#Arranges sample ID by the class/sample type and plots arranged sample IDs on Y axis 
+gg_heatmap_mat[,1]<- reorder(gg_heatmap_mat[,1],gg_heatmap_mat[,2])
+
+gg_heatmap_mat.melt <- melt(gg_heatmap_mat)#converts it into long format
+
+#Rescale all variable (columns) values in the output matrix so that they lie between 0-100
+gg_heatmap_mat.melt <- ddply(gg_heatmap_mat.melt, .(variable), transform,rescale = rescale(value, to=c(0,100)))
+
+#Plot the result using geom_tile
+(p <- ggplot(gg_heatmap_mat.melt, aes(variable, gg_heatmap_mat.melt[,1])) + 
+    geom_tile(aes(fill = rescale),colour = "#000433") + 
+    scale_fill_gradient(low = "#000433", high = "#62c3f6"))#sets the gradient colour range
+base_size <- 9
+p + theme_grey(base_size = base_size) + 
+  labs(x = "", y = colnames(gg_heatmap_mat)[1]) + 
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_y_discrete(expand = c(0, 0)) + 
+  theme( axis.text.x = element_text(size = base_size * 0.8, angle = 90, hjust = 1))+
+  guides(fill =
+           guide_legend(title = "Intensity %",#the title of the legend
+             title.theme = element_text(
+               angle = 0
+             )
+           )
+  )
+  
+
+}#-------------------------------------------------------------------------------------------------------------
+
+ggHeatmap(processedDataset)
+
+```
+
+
+<br>
+
+
+### 3.3 Statistical Significance Test (t-test)
+Next	I	programmed	**rMetabolomics**	to	do	a	series	of	2	sample	t-tests	comparing	the	levels	of each	metabolite	in	both	classes,	perform	Bonferroni	adjustment	of	p-values	for	family	wise error rate	FWER	correction,	plot	significant	metabolites	and	prints	a	table	with	the	details.	
+
+```{r t-test, echo=TRUE}
+
+#Work on the processed dataset (though it converts any non-numeric data into 0)
+dat<-processedDataset
+dat[which(is.numeric(dat)==FALSE)] <- 0
+
+iniFlag<-FALSE #Flip-flop logical flag to mark the first time a condition occurs ;-))
+for (metaCounter in 3:ncol(dat)){ #Here the loop starts from the 3rd column of the data (to avoid working on sample ID or class values)
+#A saftey condition to run t-test calculation only if the column does not contain NaN or NA
+if (is.nan(sum(dat[,metaCounter]))==FALSE & is.na(sum(dat[,metaCounter]))==FALSE){
+t.table<-t.test(dat[,metaCounter] ~ dat[,2], data=dat[,c(2,metaCounter)])#performs t-test on column metaCounter of data (contains the metabolite values) by the group in column 2 (contains sample type/classes)
+pval<-t.table$p.value
+}else{pval<-1}#If we encounter NaN or NA -> set p-value to 1  
+      if (iniFlag==FALSE){iniFlag<-TRUE;  raw_p_value.list<-c(pval)}else{
+       raw_p_value.list<-c(raw_p_value.list, pval)#saves the raw p-values for all metabolites
+      
+    }
+    
+}
+
+  
+#applies Bonferroni family wise error rate FWER correction for multiple comparisons
+bonf_p_value.list<-p.adjust(raw_p_value.list, method = "bonferroni", n = length(raw_p_value.list))
+
+
+iniFlag<-FALSE #Flip-flop logical flag to mark the first time a condition occurs ;-))
+for (metaCounter in 1:length(bonf_p_value.list)){
+
+    if (bonf_p_value.list[metaCounter]<0.05){#select adjusted p-value <0.05 (significant p-values)
+      if (iniFlag==FALSE){iniFlag<-TRUE;  sig.list<-c(metaCounter)}else{
+       sig.list<-c(sig.list, metaCounter)#saves the positions of significant p-values after Bonferroni correction
+      
+      }
+    } 
+  
+}
+
+
+dataSubset<-matrix(rep(0,length(sig.list)*3), nrow=length(sig.list),ncol=3)#Initialize matrix
+dataSubset[,1]<-colnames(dat)[sig.list]#Retrive names of significant metabolites
+dataSubset[,2]<-round(raw_p_value.list[sig.list],7)#Retrive raw p-value of significant metabolites
+dataSubset[,3]<-round(bonf_p_value.list[sig.list],7)#Retrive adjusted p-value of significant metabolites
+colnames(dataSubset)<-c("Metabolite","Raw p-value","Bonferroni corrected p-value")
+
+#calls darwTable to draw a table of the rearranged the matrix (by the values of the Bonferroni corrected p-values)
+drawTable(dataSubset[order(as.numeric(dataSubset[,3])),] , title_txt="Significant Metabolites", footer_txt="Metabolites are arranged by the Bonferroni corrected p-values.", title_txt_size=22,footer_fontface="italic" )
+
+
+#Retrives the columns of significant metabolites + the sample class
+dataSubset<-melt(dat[,c(2,sig.list)])
+
+#Plots boxplots of the significant metabolites comparing the level of metabolite between the classes
+ggplot(dataSubset, aes(dataSubset[,1], dataSubset[,3], fill=dataSubset[,2]))+
+ggtitle("Significant Metabolities (Bonferroni corrected for FWER multiple comparisons)") + 
+geom_boxplot() + 
+facet_wrap(~dataSubset[,2], scales="free")+
+  labs(x="", y="")+
+  guides(fill =
+           guide_legend(title = "Metabolite",
+             title.theme = element_text(
+               face = "bold",
+               angle = 0
+             )
+           )
+         )
+
+
+
+```
+
+<br>
+
+### 3.4 Sample Size Calculation
+Next	**rMetabolomics**	will	Calculate	required	sample	size	(n)	per	group	for	the	previously identified	significant	metabolites.	I	programmed	**rMetabolomics**	to	calculate	sample	size using	the	widely	acceptable	standards:	significance	level	(alpha)	=	0.05,	power	=	80%.	
+
+```{r powercalc, echo=TRUE}
+
+#Define the input data, significance level and power
+dat<-processedDataset
+alpha_level=0.05
+power_level=0.80
+
+
+dataSubset<-dat[,c(2,sig.list)]#retrives only the significant metabolites
+
+class1<-levels(dataSubset[,1])[1]#Gets the 1st class name (1st level in the sample type/class cloumn)
+class2<-levels(dataSubset[,1])[2]#Gets the 2st class name (2nd level in the sample type/class cloumn)
+
+iniFlag<-FALSE #Flip-flop logical flag to mark the first time a condition occurs ;-))
+for (metaCounter in 2:ncol(dataSubset)){ #a loop to calculate mean delta, sd and sample size for each metabolite
+       means_delta<-mean(dataSubset[dataSubset[,1]==class1, metaCounter])-mean(dataSubset[dataSubset[,1]==class2, metaCounter])
+       col_sd<-sd(dataSubset[, metaCounter])
+       power_t <- power.t.test(n = NULL, sd = col_sd, delta = means_delta, sig.level=alpha_level, power = power_level, type="two.sample", alternative = "two.sided")
+       if (iniFlag==FALSE){
+         iniFlag<-TRUE
+         n.list<-c(round_any(power_t$n,1, f = ceiling)) #round sample size to the upper value to be statistically more conservative ;-))
+         sd_list<-c(col_sd)
+         delta_list<-c(means_delta)
+       
+       }else{
+         
+         n.list<-c(n.list, round_any(power_t$n,1, f = ceiling))#round sample size to the upper value to be statistically more conservative ;-))
+         sd_list<-c(sd_list, col_sd)
+         delta_list<-c(delta_list, means_delta)
+
+      }
+
+}
+
+
+dataSubset<-matrix(rep(0,length(sig.list)*5), nrow=length(sig.list),ncol=5)#initialize dataSubset
+dataSubset[,1]<-colnames(dat)[sig.list]#gets the names of significant metabolites
+dataSubset[,2]<-n.list #list of sample sizes
+dataSubset[,3]<-sig.list #positions of significant metabolites
+dataSubset[,4]<-sd_list #list of sd
+dataSubset[,5]<-delta_list #list of mean delta
+colnames(dataSubset)<-c("Metabolite","Sample size (n per group)","","","")
+
+#rearrange the matrix by the n size (ascending order ie from the smallest sample size to the greatest)
+dataSubset<-dataSubset[order(as.numeric(dataSubset[,2])),]
+
+#Calls drawTable to draw a table of the 1st and 2d columns only (metabolites name and n)
+drawTable( dataSubset[,1:2], title_txt="Sample size calculation", footer_txt=paste("Significance level (Alpha)=",alpha_level,", Power=",power_level, sep=""), title_txt_size=15,footer_fontface="italic" )
+
+#rearrange the matrix by the n size - this time in descending order (just for the sake of a better looking 3D plot next ;-))
+dataSubset<-dataSubset[order(-as.numeric(dataSubset[,2])),]
+sig.list.arranged<-as.numeric(dataSubset[,3])
+sd_list.arranged<-as.numeric(dataSubset[,4])
+delta_list.arranged<-as.numeric(dataSubset[,5])
+
+```
+
+<br>
+
+### 3.5 Power Array **(Interactive 3D Model)** 
+Finally	I	programmed	**rMetabolomics**	to	plot	an	innovative	**"Power	Array"**	which	is	an	interactive	3D	model.	Power	Array		shows	the	statistical	power	obtained	for	each significant	metabolites	at	a	set	of	fixed	sample	sizes (n of 3,6,10,16,24,40,60,100,150 and 200).	Its	aim	is	to	help	researchers	decide	the	final	sample	size	and	metabolites	to	be	used	in	further	studies	in	an	easy	intuitive	way.	Power	Array	3D model can	be	manipulated	by	the	computer	mouse.		
+```{r powergrid , webgl=TRUE, echo=TRUE}
+
+testN<-c(3,6,10,16,24,40,60,100,150,200)# sets fixed sample sizes at which we will compare the power of significant metabolites
+dataSubset<-matrix(rep(0,length(sig.list.arranged)*10), nrow=length(sig.list.arranged),ncol=10)#initialize matrix
+rownames(dataSubset)<-colnames(dat)[sig.list.arranged]# get names of the significant metabolites
+colnames(dataSubset)<-testN
+
+#A nested loop to cycle through the significant metabolites and perform power calculation at the preset fixed sample sizes selected above
+for (metaCounter in 1:length(sig.list.arranged)){
+  for (pwrlvlCounter in 1: length(testN)){
+          power_t <- power.t.test(n = testN[pwrlvlCounter], sd = sd_list.arranged[metaCounter], delta = delta_list.arranged[metaCounter], sig.level=alpha_level, power = NULL, type="two.sample", alternative = "two.sided")
+       
+       dataSubset[metaCounter,pwrlvlCounter ] <-  power_t$power #save the power values to the dataSubset (these are the z values of the 3D bars)
+  }
+}
+
+#set the initial details
+nClmns<-ncol(dataSubset)
+nRws<-nrow(dataSubset)
+x_label="Metabolomics Technique"
+y_label="N patients per group" 
+z_label="Power"
+grphTitle="Power Array (Interactive 3D Model)"
+
+# Create a function interpolating colors in the range of specified colors
+jet.colors <- colorRampPalette( c("red",  "orange","yellow" ,"green4") )
+# Generate the desired number of colors from this palette
+nbcol <- 100
+color <- jet.colors(nbcol)
+
+
+	    #Plot graphics
+  hist3D (x = 1:nRws, y = 1:nClmns, z = dataSubset,
+			bty = "g", phi = 20,  theta = -60,
+			xlab = x_label, ylab = y_label, zlab = z_label, main = grphTitle, 
+			col=color, border = "black", shade = 0.8,box=FALSE,  axes = FALSE,
+			ticktype = "detailed", space = 0.15, d = 2, cex.axis = 1e-9, add=FALSE, plot = FALSE)
+	
+	# Use text3D to label x axis
+  text3D(x = 1:nRws, y = rep(-1, nRws), z = rep(0, nRws),
+			labels = rownames(dataSubset),
+			add = TRUE, adj = 1, plot = FALSE)
+	# Use text3D to label y axis
+  text3D(x = rep(0.5, nClmns),   y = 1:nClmns, z = rep(0, nClmns),
+			labels  = colnames(dataSubset),
+			add = TRUE, adj = 1, plot = FALSE)				
+
+	#Use RGL to create an interactive plot ;-)))
+  plotrgl (smooth = TRUE, x = 1:nRws, y = 1:nClmns, z = dataSubset,
+			bty = "g", phi = 20,  theta = -60,expand = 0.1,
+			xlab = "", ylab = "", zlab = "", main = grphTitle,
+			col = color, border = "black", shade = 0.4,box=TRUE, axes = FALSE,
+			ticktype = "detailed", space = 0.9, d = 2, cex.axis = 1e-9)
+
+	
+	#put Z axiz scale
+ 	axes3d( edges=c("z") )
+	
+ 	
+	
+#That is it, Thank you ;-))))
+
+```
+
+
+*** 
+
+<br>
+
+# I used the following R libraries to program rMetabolomics:
+ggplot2  
+reshape2  
+plyr  
+scales  	
+gridExtra  
+grid  
+gtable  	
+pwr  
+plot3D  	
+rgl  
+plot3Drgl  
+
+```{r}
+sessionInfo()
+```
+
+
+
+
+
+
+
+
+
+

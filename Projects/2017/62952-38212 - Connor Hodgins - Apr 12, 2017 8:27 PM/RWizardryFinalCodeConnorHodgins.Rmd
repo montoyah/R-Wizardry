@@ -1,0 +1,156 @@
+---
+title: "CRISPRseek"
+author: "Connor Hodgins"
+date: "April 3, 2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+Clean the environment
+```{r, echo=FALSE}
+rm(list=ls(all=TRUE))
+```
+
+
+```{r}
+source("https://bioconductor.org/biocLite.R")
+biocLite("Biostrings")
+library("Biostrings")
+biocLite("BSgenome")
+library("BSgenome")
+
+### Set your working directory for later
+setwd("C:/Users/Connor Hodgins/Documents/GraduateStudies/Classes/CMMB607/Final Project")
+```
+
+```{r}
+available.genomes()
+```
+
+```{r}
+### In this example I will use the yeast genome (Saccharomyces cerevisiae)
+biocLite("BSgenome.Scerevisiae.UCSC.sacCer3")
+library("BSgenome.Scerevisiae.UCSC.sacCer3")
+ygenome <- getBSgenome("BSgenome.Scerevisiae.UCSC.sacCer3")
+
+```
+
+```{r}
+installed.genomes()
+```
+
+```{r}
+### The GenomicFeatures package is required.
+
+biocLite("GenomicFeatures")
+library("GenomicFeatures")
+
+### Download the TxDb file which corresponds to the BSgenome that you downloaded in the last step.
+
+biocLite("TxDb.Scerevisiae.UCSC.sacCer3.sgdGene")
+library("TxDb.Scerevisiae.UCSC.sacCer3.sgdGene")
+```
+
+```{r}
+ls('package:TxDb.Scerevisiae.UCSC.sacCer3.sgdGene')
+```
+
+```{r}
+### Download the OrgDb package which corresponds to the BSgenome and TxDb packages which you used earlier.
+biocLite("org.Sc.sgd.db")
+library("org.Sc.sgd.db")
+```
+  
+```{r}
+### Install CRISPRseek
+biocLite("CRISPRseek")
+library("CRISPRseek")
+inputFilePath <- "C:/Users/Connor Hodgins/Documents/GraduateStudies/Classes/CMMB607/Final Project/Bts1.fasta"
+```
+  
+```{r}
+### This will allow you to access the list of restriction sites which came with CRISPRseek
+REpatternFile <- system.file('extdata', 'NEBenzymes.fa', package = 'CRISPRseek')
+```
+  
+```{r}
+results1 <- offTargetAnalysis(
+        inputFilePath = inputFilePath ,
+        gRNAoutputName = "gRNABts1" ,
+        findgRNAsWithREcutOnly=TRUE ,
+        REpatternFile = REpatternFile,
+        BSgenomeName= ygenome ,
+        chromToSearch = "chrXVI",
+        max.mismatch = 2 ,
+        txdb= TxDb.Scerevisiae.UCSC.sacCer3.sgdGene , 
+        orgAnn = "org.Sc.eg.db", 
+        outputDir = "C:/Users/Connor Hodgins/Documents/GraduateStudies/Classes/CMMB607/Final Project/Watch1")
+
+```
+
+
+```{r}
+results2 <- offTargetAnalysis(
+        inputFilePath = inputFilePath,
+        gRNAoutputName = "gRNABts1" ,
+        findgRNAsWithREcutOnly=TRUE ,
+        REpatternFile = REpatternFile,
+        findPairedgRNAOnly=TRUE , 
+        annotatePaired = TRUE,
+        max.gap = 10,
+        BSgenomeName= ygenome ,
+        chromToSearch = "chrXVI",
+        max.mismatch = 2 ,
+        txdb= TxDb.Scerevisiae.UCSC.sacCer3.sgdGene , 
+        orgAnn = "org.Sc.eg.db", 
+        outputDir = "C:/Users/Connor Hodgins/Documents/GraduateStudies/Classes/CMMB607/Final Project/Watch2")
+```
+
+```{r}
+results3 <- offTargetAnalysis(
+        inputFilePath = inputFilePath,
+        gRNAoutputName = "gRNABts1" ,
+        findgRNAsWithREcutOnly=TRUE ,
+        REpatternFile = REpatternFile,
+        findPairedgRNAOnly=TRUE , 
+        annotatePaired = TRUE,
+        max.gap = 10,
+        PAM.size = 4,
+        gRNA.size = 31,
+        PAM = "TTTN", 
+        BSgenomeName= ygenome ,
+        chromToSearch = "chrXVI",
+        max.mismatch = 3 ,
+        PAM.pattern = "^TTTN",
+        txdb= TxDb.Scerevisiae.UCSC.sacCer3.sgdGene , 
+        orgAnn = "org.Sc.eg.db", 
+        outputDir = "C:/Users/Connor Hodgins/Documents/GraduateStudies/Classes/CMMB607/Final Project/Watch3",
+        scoring.method = "CFDscore",
+        subPAM.position = c(1,2),
+        PAM.location = "5prime")
+```

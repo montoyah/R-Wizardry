@@ -1,0 +1,582 @@
+---
+title: "Final Project - RWizardry W2017"
+author: "Joseph Utomo - Ro Lab"
+date:
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+___
+# Introduction
+Terpenes are the largest and the most studied class of plant natural products, with more than 70,000 members identified (Srivastava _et al._, 2015). Human uses terpenes for diverse purposes, such as medicines, fragrances, natural rubber, insecticides, and flavoring agents. On the other side, plant uses terpenes as membrane element (steroids), photosynthesis pigment, and defense mechanism from herbivores. These roles are possible because terpenes class contain a very diverse chemical structure from a simple linear to complex multicyclic hydrocarbon structures. Despite of this diversity, all terpenes are biosynthesized from the common substrate called isopentenyl pyrophosphate (IPP). IPP, then, is utilized as substrate to make few universal terpene precursors. These universal precursors are used by terpene synthase (TPS) to make terpene backbones, including the formation of linear or cyclic hydrocarbon structures. The backbone will be decorated with various moieties by other enzyme families generating massive variation of terpenes structure (Tholl, 2006).
+
+
+The diversity of TPSs products is one of the key mechanism for chemical diversity in terpene. However, the evolutionary trajectory in TPSs have not been fully understood. One approach to examine this evolutionary trajectory is comparison two activities of TPSs enzyme family using site directed mutagenesis. Site-directed mutagenesis is a common techniques in molecular biology, including in protein studies to make mutants with specific target sequences. A study had revealed that only one key residue can alter TPSs product from linear terpene to monocyclic terpene using site-directed mutagenesis (Salmon _et al._, 2015). Yet, many important terpenes have multicyclic structure and their evolutionary trajectory remains elusive, although it can be hypothesized that they evolved from monocyclic structure-producing TPSs and mutation in some key residues unlock the ability to produce multicyclic hydrocarbon structure. Based on this hypothesis, a protein model-structure comparison of two TPS from the same plant species, _Artemisia annua_ (Aa) was performed. First TPS is bisabolol synthase (BBS, monocyclic terpenes) and second TPS is amorphadiene synthase (ADS, bicyclic terpenes). 
+
+
+Site directed mutagenesis is suitable to test the hypothesis. The drawback of this technique, however, is the amount of data to be managed. For example, the structure-based comparison between BBS and ADS resulted 23 amino acid residues as candidates. 23 substitutions of BBS residues with ADS residues means there are 2^23^ possible combinations, which are more than 8 million possible mutants. It similar with previous study from Salmon _et al._, 2015, who had 24 residues as candidates, meaning there were almost 17 million possible mutants. While they only test 3000 of their mutants, this massive data still can be gruesome and error prone to be handled manually. Therefore, this script was made especially to compare the product of different mutated enzymes.
+
+
+To use the script, the data shall contain at least three things: the ID of the samples, the mutant protein sequences, and the product of each mutants. This tutorial will explain the fundamental idea of how the script works. The script contains two parts: the first part for making the artificial data and the second part for analyzing the data. User can skip the first part if they already have the data. Basically, the artificial data was made by randomizing the total mutation and products of 100 samples using function "sample", for loop, and logical feature (if and else). The sequence of the mutants, then, was randomized based on the number of total mutation using "sample" from a matrix containing all the target residues from wild type enzymes. The matrix was constructed that each column represents each residues in the enzymes to simplify the mutation of target residues only. After the artificial data was built, the second part of the script was made to analyze the data. To analyze the data, the script using four basic steps: splitting each residues from the amino acid sequence into columns for simplifying total mutation calculation in each sample, calculating the effect of each mutated residues on amorphadiene (bicyclic terpenes) production, finding the relationship between the key residue(s) with the other mutated residues on amorphadiene production, and visualizing the results. In conclusion, the basic idea of this script is utilizing logical algorithm for finding different sequences between site-directed mutants, finding their effects on the selectivity of the products, and plotting the results. It is possible to use the script for comparing the DNA sequences of different mutant instead of protein sequences.
+
+
+# Part I: Code for building the artificial data
+## Randomizing total mutation for each sample
+In this part, the artificial data was made because no data available at this moment. The first step in building the artificial data is randomizing the amount of mutation in each sample. In the case of BBS and ADS, there are 23 residues as candidates, meaning the maximum total mutation possible in one sample is 23. To make this random number of mutation, the following code was used:
+```{r}
+nummut <- seq (from = 1, to = 23, by = 1)
+
+results <- matrix (NA, ncol = 6, nrow = 100)
+set.seed (1)
+for (i in 1:length (results[,1])){
+  results [i,1] <- sample (nummut, size = 1, replace = T)
+}
+```
+
+The code can be adjusted by changing the number of target residues (in this case 23) in "nummut" variable, changing the number of sample and different kind of data (in this case 100 and 6) in "results" variable. For this example, the amount of samples is set to 100 and there are six kinds of data: number of mutation, percentage of monocylic terpenes product, percentage of linear terpenes products, percentage of bicyclic terpenes, percentage of multicyclic terpenes products, and percentage of amorphadiene products. 
+
+
+## Randomizing the terpene products for each sample
+The terpenes products for each mutants can be classified as monocyclic, linear, bicyclic, or multicyclic. The total fraction of these compound should be 1. On the other hand, the amorphadiene is a bicyclic terpenes but not all bicyclic terpenes is amorphadiene. Therefore, in this tutorial, amorphadiene is calculated as fraction of bicyclic terpenes. To accommodate this information, the for loop and logical statement were used. In this loop, the monocylic products (wild-type BBS produce monocyclic product) are predicted as the main product and will be the first condition for the logical statement. If the random number give more than 0.95 fraction of the products, then it was set that the rest of product will be the linear terpenes. If the total fractions is not 1, it will set a different value, because the real data will not have negative products. The logical statement goes further to fill all the fractions randomly (using sample). The full code for for loop and logical statement is presented here:
+```{r, include=FALSE}
+# To distribute the percentage of products in the artificial data
+moncyc <- seq (from = 0.8, to = 1, by = 0.001) #expected to be high because it is the wild-type
+linear <- seq (from = 0, to = 0.2, by = 0.001)
+bicyc <- seq (from = 0, to = 0.1, by = 0.001)
+amorpha <- seq (from = 0, to = 1, by = 0.01)
+```
+```{r}
+for (i in 1: length (results [,1])){
+  results [i,2] <- sample (moncyc, size = 1, replace = T)
+  if (results [i,2] > 0.95){
+    results [i,3] <- 1 - results [i,2]
+    results [i,4:6] <- 0
+  } else {
+  results [i,3] <- sample (linear, size = 1, replace = T)
+  results [i,4] <- sample (bicyc, size = 1, replace = T)
+  if (1- results [i,2] - results [i,3] <= 0) {
+    results [i,3] <- 1 - results [i,2]
+    results [i,4:6] <- 0
+  }
+  if (1 - results [i,2] - results [i,3] - results [i,4] <= 0 ){
+  results [i,4] <- 1 - results [i,2] - results [i,3]
+  results [i,5] <- 0
+  results [i,6] <- (sample (amorpha, size = 1, replace = T))*results [i,4]
+  } else {
+    results [i,5] <- 1 - results [i,2] - results [i,3] - results [i,4]
+    results [i,6] <- (sample (amorpha, size = 1, replace = T))*results [i,4]
+  }
+  if (results [i,4] < 0){
+    results [i,4:6] <- 0
+  }
+  }
+}
+```
+
+## Randomizing the mutated sequence of each sample
+Based on the total mutation of each sample, the sequence can be randomized as well. Before randomization, a variable to define the position of residues is required. In this code, a matrix called "resmut" defines the position of residues and the residues to be mutated into for each position, _i.e._ amino acid residues of AaADS in each position.
+```{r}
+residues <- c (292, 295, 399, 518, 288, 291, 294, 392, 396, 447, 450, 261, 274, 289, 373, 381, 395, 397, 398, 435, 446, 461, 512)
+resultsframe <- as.data.frame(results)
+colnames (resultsframe) <- c("Num_Mut","Monocylic_percent", "Linear_percent", "Bicyclic_percent", "Multicyclic_percent","Amorphadiene")
+resmut <- matrix(NA, ncol = 2, nrow = 23)
+colnames (resmut) <- c("residues", "AaADS")
+resmut [,1] <- residues
+resmut [,2] <- c ("V", "I", "T", "Q", "F", "A", "V", "H", "V", "T", "A", "L", "G", "T", "N", "A", "V", "I", "I", "S", "M", "L", "C")
+
+```
+
+### Randomizing the mutated position based on total mutation
+Based on total mutation and the specific residues to be mutated. A for loop to make a list contain mutated position for each sample was made. This code asks R to take random  residues position based on total mutation. The 'results' matrix is converted to data frame 'resultsframe' so it can contain different type of data.
+```{r}
+doc <- list ()
+for (i in 1:length (resultsframe$Num_Mut)){
+  parking <- sample (residues, size = results [i,1])
+  doc [[length(doc)+1]] <- parking
+}
+```
+
+### Make the mutation sequence based on mutated position
+The mutated position variable gives the foundation to make mutation sequence. However, before the mutation sequence can be constructed, the wild-type sequence (AaBBS) should be re-defined so that each residues fill one column. To make that, the "strsplit" function was used.
+```{r}
+AaBBS <- "MSLTEEKPIRPIANFSPSIWGDQFLIYDNQVEQGVEQIVKDLKKEVRQLLKEALDIPMKHANLLKLVDEIQRLGISYLFEQEIDHALQHIYETYGDNWSGDRSSLWFRLMRKQGYFVTCDVFNNHKDESGVFKQSLKNHVEGLLELYEATSMRVPGEIILEDALVFTQSHLSIIAKDTLSINPALSTEIQRALKKPLWKRLPRIEAVQYIPFYEQQDSHNKTLIKLAKLEFNLLQSLHREELSQLSKWWKAFDVKNNAPYSRDRIVECYFWALASRFEPQYSRARIFLAKVIALVTLIDDIYDAYGTYEELKIFTEAIERWSITCLDMIPEYMKPIYKLFMDTYTEMEEILAKEGKTNIFNCGKEFVKDFVRVLMVEAQWLNEGHIPTTEELDSIAVNLGGANLLTTTCYLGMSDIVTKEAFEWAVSEPPLLRYKGILGRRLNDLAGHKEEQERKHVSSSVESYMKEYNVSEEYAKNLLYKQVEDLWKDINREYLITKTIPRPLLVAVINLVHFLDVLYAEKDNFTRMGEEYKNLVKSLLVYPMSI"
+mutres <- matrix(NA, nrow = length(resultsframe$Num_Mut), ncol = 546)
+for (i in 1:length(mutres[,1])){
+  mutres [i,] <- strsplit(AaBBS, "")[[1]]
+}
+```
+After the wild-type sequence was re-structured, then, a double for loop was used to introduce the mutation in each sample based on total mutation in previous Section.
+```{r}
+for (i in 1:length(resultsframe$Num_Mut)){
+  z <- unlist (doc[i])
+  y <- resultsframe [i,1]
+  for (j in 1:y){
+    mutres [i, z[j]] <- subset (resmut, resmut [,1] == z[j], select = 2)
+  }
+}
+```
+
+## Paste the sequence together and make the final artificial data
+After the mutation was incorporated into specific residues (represented as column) for each sample, the sequence was then pasted together to make a artificial data that mimic the real data. For pasting the sequence into one unique sequence for each sample, the function paste was used. The sequence was then attached into the previous data containing total mutation and percentage of products. The code for pasting the sequence is:
+```{r}
+# Paste the sequence into one long character
+seqmut <- matrix (NA, nrow = length (results[,1]), ncol = 1)
+for (i in 1:length(results[,1])){
+  seqmut [i,] <-paste (mutres [i,], collapse = "")
+}
+## Final Artifical Data Results
+docresult <- cbind(resultsframe, seqmut)
+sampleid <- as.data.frame (matrix (NA, ncol = 1, nrow = length (results [,1])))
+for (i in 1:length(sampleid[,1])){
+  sampleid [i,1] <- paste ("MutBBS", i, sep = "_")
+}
+colnames (sampleid) <- "Sample_ID"
+finresult <- cbind (sampleid, docresult[,2:7])
+```
+The result of the final artificial data looks like below
+```{r, echo = FALSE}
+head (finresult, 3)
+```
+
+# Part II: Analyzing the data for see the effect of mutation
+The user can start to use this script from this part if they have the actual data. Data analysis is performed by these steps: analyzing number of mutation, identification of mutation effect from each residues to amorphadiene production, and identification of key residues that producing amorphadiene. For this part, it is assumed that the part I is not known as in the real data, thus, some of the variable is re-run or re-define. 
+
+## Calculating the number of mutation in each sample
+The first step in data analysis is to calculate the number of mutation and identify which residues are mutated in each sample only from the known sample sequence (exactly the reverse of the Part I). The sequence and sample ID were subsetted from the data into a new matrix for simplifying the task.This subsetting will be easier using "select" function from 'dplyr' package. The sequence is converted into 'character' because the data of the sequence is considered as 'factor'. 
+```{r, include=FALSE}
+library (dplyr)
+```
+```{r}
+mutation <- finresult %>% select (Sample_ID, seqmut)
+colnames (mutation) <- c("Sample_ID","Protein_Sequence")
+mutation$Protein_Sequence <- as.character(mutation$Protein_Sequence)
+```
+
+The wild-type sequence (AaBBS) should be re-defined so that each residues fill one column. To achieve this, the "strsplit" function was used.
+```{r}
+AaBBS <- "MSLTEEKPIRPIANFSPSIWGDQFLIYDNQVEQGVEQIVKDLKKEVRQLLKEALDIPMKHANLLKLVDEIQRLGISYLFEQEIDHALQHIYETYGDNWSGDRSSLWFRLMRKQGYFVTCDVFNNHKDESGVFKQSLKNHVEGLLELYEATSMRVPGEIILEDALVFTQSHLSIIAKDTLSINPALSTEIQRALKKPLWKRLPRIEAVQYIPFYEQQDSHNKTLIKLAKLEFNLLQSLHREELSQLSKWWKAFDVKNNAPYSRDRIVECYFWALASRFEPQYSRARIFLAKVIALVTLIDDIYDAYGTYEELKIFTEAIERWSITCLDMIPEYMKPIYKLFMDTYTEMEEILAKEGKTNIFNCGKEFVKDFVRVLMVEAQWLNEGHIPTTEELDSIAVNLGGANLLTTTCYLGMSDIVTKEAFEWAVSEPPLLRYKGILGRRLNDLAGHKEEQERKHVSSSVESYMKEYNVSEEYAKNLLYKQVEDLWKDINREYLITKTIPRPLLVAVINLVHFLDVLYAEKDNFTRMGEEYKNLVKSLLVYPMSI"
+targetres <- matrix (NA, ncol = 546, nrow = 1)
+targetres [1,] <- strsplit(AaBBS, "")[[1]]
+```
+Notice that every wild-type residue is positioned into one separate column. Using the same strategy, the sequence of each mutant is splitted into each column and put them into a matrix, which every column represents position of residues and every row represents the sample. It is possible because each mutant has the same length (546 residues).
+```{r}
+splitres <- matrix (NA, ncol = 546, nrow = length(mutation[,1]))
+for (i in 1:length(mutation [,1])){
+  splitres [i,] <- strsplit(mutation[i,2], "")[[1]]
+}
+```
+
+The resulting format of sequence is easier to be compared with the wild-type sequence, which have the similar format. Using the for loop, each residues in each individual sample is compared with the wild-type, resulting logical arguments (TRUE or FALSE)
+```{r}
+diffres <- matrix (NA, ncol = 546, nrow = length(splitres [,1]))
+for (i in 1:length (splitres [,1])){
+  diffres [i,] <- splitres [i,] == targetres [1, ]
+}
+```
+
+Now, the data has been re-formatted into logical function. Basically, this format tells us if each residues (each column) is different with the wild-type or not. Using this format, the number of mutation for each sample (each row) can be calculated easily by totalling the amount of "FALSE" in each row. Attachment of this data into the sample ID and amorphadiene production will give the summary table on total mutation and amorphadiene production in each sample.
+```{r}
+numbermut <- as.data.frame(matrix (NA, ncol = 3, nrow = length(splitres [,1])))
+for (i in 1:length (splitres [,1])){
+  numbermut [i,1] <- mutation [i,1]
+  numbermut [i,2] <- sum (diffres [i,] == FALSE)
+  numbermut [i,3] <- finresult [i,6]
+}
+colnames (numbermut) <- c("Sample_ID","Total_mutation","Amorpha_percent")
+```
+```{r, echo = FALSE}
+head (numbermut)
+```
+
+## Identification of key residues for amorphadiene production
+### Compile the production of amorphadiene in each sample
+Amorphadiene (bicyclic terpenes) will be produced from mutated BBS if some key residues can activate the ability of synthesizing amorphadiene. To identify the key residues, another matrix is used to simplify the data. This matrix will give logical information (TRUE or FALSE) whether amorphadiene is produced or not in each sample. If the sample produce amorphadiene, it will be TRUE and if it does not, it will be FALSE. The result is, then, bound with the matrix containing comparison of each row with wild-type mutants residues. 
+```{r}
+ADSprod <- matrix (NA, ncol = 2, nrow = length (splitres [,1]))
+for (i in 1:length (splitres [,1])){
+  ADSprod [i,1] <- mutation [i,1]
+  ADSprod [i,2] <- finresult [i,6] > 0
+}
+adiene <- cbind(ADSprod,diffres)
+```
+
+### Identify samples which produce amorphadiene
+The previous data is massive and difficult to read. Thus, the data is simplified by subsetting only samples producing amorphadiene and only show the target residues. The target residues should be defined first. Then, the positive mutants can be subsetted along with the target residues. Notice that there are 23 target residues, thus the matrix has 26 column to accommodate sample ID, total mutation, amorphadiene production, and the 23 target residues status of each sample. The function for subsetting the target residues tells R to subset only the target residues from all residues if the amorphadiene in the sample bigger than zero (+2 is needed because 'adiene' is the matrix that attach sample ID and logical value of amorphadiene production).
+```{r}
+residues <- c (292, 295, 399, 518, 288, 291, 294, 392, 396, 447, 450, 261, 274, 289, 373, 381, 395, 397, 398, 435, 446, 461, 512)
+pos_mutant <- as.data.frame(matrix(NA, nrow = sum (numbermut [,3] > 0),ncol = 26))
+pos_mutant [,1] <- c(subset (numbermut[,1], numbermut [,3]>0))
+for (i in 1:length(pos_mutant[,1])){
+  pos_mutant[i,2] <- subset(numbermut[,2],numbermut[,1] == pos_mutant[i,1])
+  pos_mutant[i,3] <- subset(numbermut[,3],numbermut[,1] == pos_mutant[i,1])
+  pos_mutant[i,4:26] <- subset(adiene [,residues+2],adiene[,1] == pos_mutant[i,1])
+}
+colnames(pos_mutant) <- c("Sample_ID","Total_mutation","Amorphadiene_percent",residues)
+```
+
+### Compile the effect of each residues that makes amorphadiene
+To identifty the samples which produces amorphadiene will not be meaningful if the key residue cannot be identified. Therefore, the data containing amorphadiene producing samples is converted into target residues data. This data aims to calculate number of minimal mutation needed for each target residues to produce amorphadiene. The code subsets the 'pos_mutant' matrix with the argument to search minimum number of mutation in each target residues. Remember that this matrix only contain positive samples. Therefore, it represents minimum mutation needed for each target residues to produce amorphadiene. Key residues are the residues that have the lowest minimum mutation. If a residue had one minimum mutation, it means the mutation only in this residue is sufficient to activate the ability of synthesizing amorphadiene. 
+```{r}
+mutant_effect <- as.data.frame (matrix (NA, ncol = 2, nrow = 23))
+mutant_effect [,1] <- residues
+for (i in 1:length(mutant_effect[,1])){
+  mutant_effect [i,2] <- min(subset(pos_mutant[,2],pos_mutant[,i+3] == FALSE))
+  # +3 only indicates to take the proper residue, because the matrix contain another data
+}
+colnames (mutant_effect) <- c("Residues", "Min_mutation")
+mutant_effect$Residues <- as.factor(mutant_effect$Residues)
+```
+
+### Visualization of the results
+After the data is organized, the meaningful plot can be produced. This script uses 'ggplot2' and 'RColorBrewer'. A function, previously built in an assignment for a homework in Winter 2017 R course in Dept. of Biological Science University of Calgary, is used to simplify the x and y axis and also the title format of the plot.
+```{r}
+library (ggplot2)
+library (RColorBrewer)
+
+opt.theme <- function (main.face = "bold", axis.face = "bold"){
+  theme(plot.title = element_text(hjust = 0.5, family ="sans", color = "black", face = main.face, size = 25)) +
+    theme(axis.title.x = element_text(family = "sans", color = "black", face = axis.face, size = 15),
+          axis.title.y = element_text(family = "sans", color = "black", face = axis.face, size = 15),
+          axis.text.x = element_text (colour = 'black', size = 10, family = 'sans'),
+          axis.text.y = element_text (colour = 'black', size = 10, family = 'sans'))
+}
+```
+
+First plot is to examine the effect of total mutation in each sample on the amorphadiene production. This plot uses 'pos_mutant' matrix which contains total mutation and amorphadiene production in each samples. The result below shows that there are no relationship between number of mutated residue in each sample to amorphadiene production. It means the amorphadiene production does not depend on number of mutation and indicates that there are several key residues in BBS that can unlock the ability to make bicylic products, amorphadiene (low total mutation still can produce amorphadiene). 
+```{r, echo = FALSE}
+ggplot (pos_mutant,aes(x = Total_mutation, y = Amorphadiene_percent)) +
+  geom_point (aes(color = Total_mutation), size = 5)+
+  scale_color_gradient2(low = "yellow", high = "red", mid = "orange", midpoint = 8, name = "Total Mutation")+
+  scale_x_discrete ("Number of Mutation") +
+  scale_y_continuous ("Amorphadiene Produced (%)")+
+  ggtitle("Effect of Total Mutation \nto Amorphadiene Production")+
+  opt.theme()
+```
+
+The previous plot show small number mutation is enough to synthesize amorphadiene. Therefore, the next plot is made to show which residue has the lowest minimum mutation to produce amorphadiene. This plot uses 'mutant_effect' matrix.
+```{r, echo = FALSE}
+ggplot (mutant_effect, aes(x = Residues, y = Min_mutation, fill = Residues, label = Min_mutation, show_guide = FALSE))+
+  geom_bar(stat = "identity") +
+  theme_bw ()+
+  scale_fill_discrete (h = c(10,250), c = 100, l = 30, guide = FALSE)+
+  scale_x_discrete ("Residues") +
+  scale_y_continuous ("Minimum Residues",limits = c(0,10))+
+  theme (legend.position = "bottom")+
+  ggtitle("Minimum Mutation for each Residues\nto Produce Amorphadiene")+
+  geom_text(size = 4, vjust = -0.5)+
+  opt.theme()
+```
+
+## The relationship of key residues with other residues
+The plot of minimum mutation showed residues 399 and 518 as the key residues because 1 mutation (mutation of residue 399 or 518 only) is sufficient to activate the ability of amorphadiene synthesis in BBS. Therefore, deeper analysis of the relation of both residues with other residues are needed.
+
+### Preparing the data
+To examine the relationship of key residues with other target residues, the script uses "which"" function to find residues with 1 minimum mutation (which are residue 399 and 518). This data, then, is filled into a data frame (column 1). This data frame is also filled with the other target residues (column 2). The goal for this data frame is to compile combination of the key residue (399 and 518) with the rest of target residue. It shall calculate total samples that contains mutation in one of the key residue (399 or 518) and each other target residues. It also calculate among the total combination, how many combination that produce amorphadiene and how many combination that do not produce amorphadiene. For example, residue 399 can be mutated together with residue 289 in a sample which contains 18 total mutation (the combination of residue 399 with the other 16 residues is also calculated for each associated residues). Residue 399 also can be mutated together with residue 289 in a sample which contains only 5 total mutation. Both samples will have different products, but both samples contain mutation in residue 399 and 289. In these two different samples, the total combination between residue 399 and 289 will be 2 and if both samples produce amorphadiene, the combination between residues 399 and 289 that result in amorphadiene production will be 2 as well. In other words, the combination is only calculated the relationship between two residues in all samples, but does not consider the total mutation in one sample. If the key residues (399 or 518) have positive relationship with one specific residue, they will show higher combination that produce amorphadiene than combination that do not produce amorphadiene.
+```{r}
+crit.residues <- mutant_effect [which(mutant_effect$Min_mutation == 1),1]
+relationship <- as.data.frame(matrix(NA,ncol = 5, nrow = 46))
+relationship [,1] <- as.factor(rep(crit.residues))
+relationship [,1] <- sort(relationship[,1])
+relationship [,2] <- as.factor(rep(residues))
+ for (i in 1:length(relationship[,1])){
+  relationship [i,3] <- sum(adiene[,as.numeric(as.character(relationship [i,1]))+2] == FALSE & adiene[,as.numeric(as.character(relationship [i,2]))+2] == FALSE)
+  relationship [i,4] <- sum(adiene[,as.numeric(as.character(relationship [i,1]))+2] == FALSE & adiene[,as.numeric(as.character(relationship [i,2]))+2] == FALSE & adiene[,2]== TRUE)
+  relationship [i,5] <- sum(adiene[,as.numeric(as.character(relationship [i,1]))+2] == FALSE & adiene[,as.numeric(as.character(relationship [i,2]))+2] == FALSE & adiene[,2]== FALSE)
+  if (relationship [i,1] == relationship [i,2]){
+    relationship [i,] <- NA
+  }
+}
+colnames(relationship) <- c("Critical_residues","Associated_residues","Total_combination","Combination_produce_ADS", "Combination_no_ADS")
+relationship <- na.omit(relationship) # For deleting the relationship data between the key residues (399 or 518) with itself.
+```
+
+The table will be something like this:
+```{r, echo = FALSE}
+head (relationship)
+tail (relationship)
+```
+
+### Vizualization of the data
+The data about the relationship is plotted by faceting each key residues into separate graph, using "facet" function in 'ggplot2' package
+
+```{r}
+ggplot(relationship, aes(x = Combination_no_ADS, y = Combination_produce_ADS, size = Total_combination, label = Associated_residues,color = Associated_residues))+
+  geom_jitter () +
+  facet_wrap(~ Critical_residues)+
+  scale_x_continuous ("#Combination without amorphadiene produced") +
+  scale_y_continuous ("#Combination resulting amorphadiene")+
+  theme (legend.position = "bottom", strip.text.x = element_text(size = 12, face = "bold"))+
+  guides(color = FALSE)+
+  scale_size_continuous(name = "Total Combination")+
+  ggtitle("Relationship of Residues 399 and 518\nwith Other Residues")+
+  geom_text(size = 3, vjust = -0.5, color = "black")+
+  opt.theme()
+```
+
+
+The plot shows that mutation on residue 294 result in amorphadiene production when combine with either residue 399 or 518 (around 20 combination with either 399 or 518 resulting amorphadiene production compared to 17 combination that do not produce amorphadiene). However, residues 381, 447, and 450 combination with either residues 399 or 518 (which result in amorphadiene in single mutation), probably inactivate or repress the ability of the mutant to produce bicyclic terpene, amorphadiene. More comprehensive experiment regarding the relationship of these residues (399 and 518 with 294, 381, 447, and 450) is needed.
+
+
+This script can be a simple analysis tool in comparing effect of residues in enzyme mutation. Surely, the data is artificial and the result is not a real data, but it demonstrates that the script can be at least used as the first analysis tool when handling massive amount of data.
+
+
+# Reference
+Salmon, M., Laurendon, C., Vardakou, M., Cheema, J., Defernez, M., Green, Sol., Faraldos, J.A., and O'Maille, P. (2015). Emergence of terpene cyclization in _Artemisia annua_. _Nature Comm_. __6__:6143
+
+Srivastava, P., Daramwar P., Krithika, R., Pandreka, A., Shankar, S. and Thulasiram, H. (2015). Functional characterization of novel sesquiterpene synthases from Indian sandalwood, _Santalum album_. _Scientific Reports_ __5__: 10095
+
+Tholl, D. (2006). Terpene synthases and the regulation, diversity and biological roles of terpene metabolism. _Current Opinion in Plant Biology_ __9__: 297-304.
+
+___
+___
+
+# Appendix: Session Info
+```{r}
+sessionInfo()
+```
+
+# Appendix: Full Code
+## Part I: making the artificial data
+```{r, eval = FALSE}
+# Number of mutation
+nummut <- seq (from = 1, to = 23, by = 1)
+# Matrix to randomize the number of mutation
+results <- matrix (NA, ncol = 6, nrow = 100)
+set.seed (1)
+for (i in 1:length (results[,1])){
+  results [i,1] <- sample (nummut, size = 1, replace = T)
+}
+
+## Products of each samples
+moncyc <- seq (from = 0.8, to = 1, by = 0.001)
+linear <- seq (from = 0, to = 0.2, by = 0.001)
+bicyc <- seq (from = 0, to = 0.1, by = 0.001)
+amorpha <- seq (from = 0, to = 1, by = 0.01)
+### Loop for making sure the total product fraction is 1
+for (i in 1: length (results [,1])){
+  results [i,2] <- sample (moncyc, size = 1, replace = T)
+  if (results [i,2] > 0.95){
+    results [i,3] <- 1 - results [i,2]
+    results [i,4:6] <- 0
+  } else {
+  results [i,3] <- sample (linear, size = 1, replace = T)
+  results [i,4] <- sample (bicyc, size = 1, replace = T)
+  if (1- results [i,2] - results [i,3] <= 0) {
+    results [i,3] <- 1 - results [i,2]
+    results [i,4:6] <- 0
+  }
+  if (1 - results [i,2] - results [i,3] - results [i,4] <= 0 ){
+  results [i,4] <- 1 - results [i,2] - results [i,3]
+  results [i,5] <- 0
+  results [i,6] <- (sample (amorpha, size = 1, replace = T))*results [i,4]
+  } else {
+    results [i,5] <- 1 - results [i,2] - results [i,3] - results [i,4]
+    results [i,6] <- (sample (amorpha, size = 1, replace = T))*results [i,4]
+  }
+  if (results [i,4] < 0){
+    results [i,4:6] <- 0
+  }
+  }
+}
+
+# Check if the total products are greater or less than 1
+a <- 1- results [,2] - results [,3] - results [,4] - results [,5]
+print (a)
+
+# From amounts of mutation --> generate the mutation for protein sequence
+residues <- c (292, 295, 399, 518, 288, 291, 294, 392, 396, 447, 450, 261, 274, 289, 373, 381, 395, 397, 398, 435, 446, 461, 512)
+
+
+# Making results matrix as data frame so it can contain different type of data
+resultsframe <- as.data.frame(results)
+colnames (resultsframe) <- c("Num_Mut","Monocylic_percent", "Linear_percent", "Bicyclic_percent", "Multicyclic_percent","Amorphadiene")
+# Matrix for storing the information of target residues
+resmut <- matrix(NA, ncol = 2, nrow = 23)
+colnames (resmut) <- c("residues", "In AaADS")
+resmut [,1] <- residues
+resmut [,2] <- c ("V", "I", "T", "Q", "F", "A", "V", "H", "V", "T", "A", "L", "G", "T", "N", "A", "V", "I", "I", "S", "M", "L", "C")
+
+# List for asking R to sample specific amount of specific residues (based on amount of mutation)
+doc <- list ()
+for (i in 1:length (resultsframe$Num_Mut)){
+  parking <- sample (residues, size = results [i,1])
+  doc [[length(doc)+1]] <- parking
+}
+
+doc
+
+# Make the mutation sequence
+AaBBS <- "MSLTEEKPIRPIANFSPSIWGDQFLIYDNQVEQGVEQIVKDLKKEVRQLLKEALDIPMKHANLLKLVDEIQRLGISYLFEQEIDHALQHIYETYGDNWSGDRSSLWFRLMRKQGYFVTCDVFNNHKDESGVFKQSLKNHVEGLLELYEATSMRVPGEIILEDALVFTQSHLSIIAKDTLSINPALSTEIQRALKKPLWKRLPRIEAVQYIPFYEQQDSHNKTLIKLAKLEFNLLQSLHREELSQLSKWWKAFDVKNNAPYSRDRIVECYFWALASRFEPQYSRARIFLAKVIALVTLIDDIYDAYGTYEELKIFTEAIERWSITCLDMIPEYMKPIYKLFMDTYTEMEEILAKEGKTNIFNCGKEFVKDFVRVLMVEAQWLNEGHIPTTEELDSIAVNLGGANLLTTTCYLGMSDIVTKEAFEWAVSEPPLLRYKGILGRRLNDLAGHKEEQERKHVSSSVESYMKEYNVSEEYAKNLLYKQVEDLWKDINREYLITKTIPRPLLVAVINLVHFLDVLYAEKDNFTRMGEEYKNLVKSLLVYPMSI"
+mutres <- matrix(NA, nrow = length(resultsframe$Num_Mut), ncol = 546)
+for (i in 1:length(mutres[,1])){
+  mutres [i,] <- strsplit(AaBBS, "")[[1]]
+}
+
+
+for (i in 1:length(resultsframe$Num_Mut)){
+  z <- unlist (doc[i])
+  y <- resultsframe [i,1]
+  for (j in 1:y){
+    mutres [i, z[j]] <- subset (resmut, resmut [,1] == z[j], select = 2)
+  }
+}
+
+#### Just for Checking ########
+doc [1]
+doc [100]
+
+mutres [1, 294] 
+mutres [100, 294]
+###############################
+
+## Paste the sequence together
+seqmut <- matrix (NA, nrow = length (results[,1]), ncol = 1)
+
+for (i in 1:length(results[,1])){
+  seqmut [i,] <-paste (mutres [i,], collapse = "")
+}
+
+unique (seqmut)
+
+## Final Artifical Data Results
+docresult <- cbind(resultsframe, seqmut)
+sampleid <- as.data.frame (matrix (NA, ncol = 1, nrow = length (results [,1])))
+for (i in 1:length(sampleid[,1])){
+  sampleid [i,1] <- paste ("MutBBS", i, sep = "_")
+}
+colnames (sampleid) <- "Sample_ID"
+finresult <- cbind (sampleid, docresult[,2:7])
+```
+## Part II: analyzing the data
+```{r, eval = FALSE}
+## Find Mutation number from the sequence in the artificial data
+library (dplyr)
+mutation <- finresult %>% select (Sample_ID, seqmut)
+colnames (mutation) <- c("Sample_ID","Protein_Sequence")
+mutation$Protein_Sequence <- as.character(mutation$Protein_Sequence)
+str (mutation)
+
+## Make a matrix containing split AaBBS (Background) and AaADS
+AaBBS <- "MSLTEEKPIRPIANFSPSIWGDQFLIYDNQVEQGVEQIVKDLKKEVRQLLKEALDIPMKHANLLKLVDEIQRLGISYLFEQEIDHALQHIYETYGDNWSGDRSSLWFRLMRKQGYFVTCDVFNNHKDESGVFKQSLKNHVEGLLELYEATSMRVPGEIILEDALVFTQSHLSIIAKDTLSINPALSTEIQRALKKPLWKRLPRIEAVQYIPFYEQQDSHNKTLIKLAKLEFNLLQSLHREELSQLSKWWKAFDVKNNAPYSRDRIVECYFWALASRFEPQYSRARIFLAKVIALVTLIDDIYDAYGTYEELKIFTEAIERWSITCLDMIPEYMKPIYKLFMDTYTEMEEILAKEGKTNIFNCGKEFVKDFVRVLMVEAQWLNEGHIPTTEELDSIAVNLGGANLLTTTCYLGMSDIVTKEAFEWAVSEPPLLRYKGILGRRLNDLAGHKEEQERKHVSSSVESYMKEYNVSEEYAKNLLYKQVEDLWKDINREYLITKTIPRPLLVAVINLVHFLDVLYAEKDNFTRMGEEYKNLVKSLLVYPMSI"
+
+targetres <- matrix (NA, ncol = 546, nrow = 1)
+targetres [1,] <- strsplit(AaBBS, "")[[1]]
+
+## Make a matrix and splitting the residue
+splitres <- matrix (NA, ncol = 546, nrow = length(mutation[,1]))
+for (i in 1:length(mutation [,1])){
+  splitres [i,] <- strsplit(mutation[i,2], "")[[1]]
+}
+
+## Identify the mutated residues and amount of mutation by comparing with AaBBS
+diffres <- matrix (NA, ncol = 546, nrow = length(splitres [,1]))
+for (i in 1:length (splitres [,1])){
+  diffres [i,] <- splitres [i,] == targetres [1, ]
+}
+
+numbermut <- as.data.frame(matrix (NA, ncol = 3, nrow = length(splitres [,1])))
+for (i in 1:length (splitres [,1])){
+  numbermut [i,2] <- sum (diffres [i,] == FALSE)
+  numbermut [i,1] <- mutation [i,1]
+  numbermut [i,3] <- finresult [i,6]
+}
+colnames (numbermut) <- c("Sample_ID","Total_mutation","Amorpha_percent")
+
+ADSprod <- matrix (NA, ncol = 2, nrow = length (splitres [,1]))
+for (i in 1:length (splitres [,1])){
+  ADSprod [i,1] <- mutation [i,1]
+  ADSprod [i,2] <- finresult [i,6] > 0
+}
+
+adiene <- cbind(ADSprod,diffres)
+
+## Make compilation of amount of mutant residues
+residues <- c (292, 295, 399, 518, 288, 291, 294, 392, 396, 447, 450, 261, 274, 289, 373, 381, 395, 397, 398, 435, 446, 461, 512)
+# Compile the positive samples
+pos_mutant <- as.data.frame(matrix(NA, nrow = sum (numbermut [,3] > 0),ncol = 26))
+pos_mutant [,1] <- c(subset (numbermut[,1], numbermut [,3]>0))
+for (i in 1:length(pos_mutant[,1])){
+  pos_mutant[i,2] <- subset(numbermut[,2],numbermut[,1] == pos_mutant[i,1])
+  pos_mutant[i,3] <- subset(numbermut[,3],numbermut[,1] == pos_mutant[i,1])
+  pos_mutant[i,4:26] <- subset(adiene [,residues+2],adiene[,1] == pos_mutant[i,1])
+}
+colnames(pos_mutant) <- c("Sample_ID","Total_mutation","Amorphadiene_percent",residues)
+
+mutant_effect <- as.data.frame (matrix (NA, ncol = 2, nrow = 23))
+mutant_effect [,1] <- residues
+for (i in 1:length(mutant_effect[,1])){
+  mutant_effect [i,2] <- min(subset(pos_mutant[,2],pos_mutant[,i+3] == FALSE))
+  # +3 only indicates to take the proper residue, because the matrix contain another data
+}
+colnames (mutant_effect) <- c("Residues", "Min_mutation")
+mutant_effect$Residues <- as.factor(mutant_effect$Residues) #because the residues are factor rather than number or integer
+
+
+## Plotting the data
+library (ggplot2)
+library (RColorBrewer)
+
+opt.theme <- function (main.face = "bold", axis.face = "bold"){
+  theme(plot.title = element_text(hjust = 0.5, family ="sans", color = "black", face = main.face, size = 25)) +
+    theme(axis.title.x = element_text(family = "sans", color = "black", face = axis.face, size = 15),
+          axis.title.y = element_text(family = "sans", color = "black", face = axis.face, size = 15),
+          axis.text.x = element_text (colour = 'black', size = 10, family = 'sans'),
+          axis.text.y = element_text (colour = 'black', size = 10, family = 'sans'))
+}
+
+# Plot the effect of Total Mutation with Amorphadiene production
+ggplot (pos_mutant,aes(x = Total_mutation, y = Amorphadiene_percent)) +
+  geom_point (aes(color = Total_mutation), size = 5)+
+  scale_color_gradient2(low = "yellow", high = "red", mid = "orange", midpoint = 8, name = "Total Mutation")+
+  scale_x_discrete ("Number of Mutation") +
+  scale_y_continuous ("Amorphadiene Produced (%)")+
+  ggtitle("Effect of Total Mutation to Amorphadiene Production")+
+  opt.theme()
+
+# For plotting minimal mutated residues needed for producing amorphadiene
+ggplot (mutant_effect, aes(x = Residues, y = Min_mutation, fill = Residues, label = Min_mutation, show_guide = FALSE))+
+  geom_bar(stat = "identity") +
+  theme_bw ()+
+  scale_fill_discrete (h = c(10,250), c = 100, l = 30, guide = FALSE)+
+  scale_x_discrete ("Residues") +
+  scale_y_continuous ("Minimum Residues",limits = c(0,10))+
+  theme (legend.position = "bottom")+
+  ggtitle("Minimum Mutation for each Residues\nto Produce Amorphadiene")+
+  geom_text(size = 4, vjust = -0.5)+
+  opt.theme()
+
+## From the result -->  399 and 518 is the key residues, search for relationship
+## See the combination of each residues with Residue 289 and 399
+crit.residues <- mutant_effect [which(mutant_effect$Min_mutation == 1),1]
+relationship <- as.data.frame(matrix(NA,ncol = 5, nrow = 46))
+relationship [,1] <- as.factor(rep(crit.residues))
+relationship [,1] <- sort(relationship[,1])
+relationship [,2] <- as.factor(rep(residues))
+ for (i in 1:length(relationship[,1])){
+  relationship [i,3] <- sum(adiene[,as.numeric(as.character(relationship [i,1]))+2] == FALSE & adiene[,as.numeric(as.character(relationship [i,2]))+2] == FALSE)
+  relationship [i,4] <- sum(adiene[,as.numeric(as.character(relationship [i,1]))+2] == FALSE & adiene[,as.numeric(as.character(relationship [i,2]))+2] == FALSE & adiene[,2]== TRUE)
+  relationship [i,5] <- sum(adiene[,as.numeric(as.character(relationship [i,1]))+2] == FALSE & adiene[,as.numeric(as.character(relationship [i,2]))+2] == FALSE & adiene[,2]== FALSE)
+  if (relationship [i,1] == relationship [i,2]){
+    relationship [i,] <- NA
+  }
+}
+colnames(relationship) <- c("Critical_residues","Associated_residues","Total_combination","Combination_produce_ADS", "Combination_no_ADS")
+relationship <- na.omit(relationship)# For deleting the relationship data between the key residues (399 or 518) with itself.
+
+# Plotting the relationship between the key residues with other residues
+ggplot(relationship, aes(x = Combination_no_ADS, y = Combination_produce_ADS, size = Total_combination, label = Associated_residues,color = Associated_residues))+
+  geom_jitter () +
+  facet_wrap(~ Critical_residues)+
+  scale_x_continuous ("#Combination without ADS Produced") +
+  scale_y_continuous ("#Combination resulting ADS Produced")+
+  theme (legend.position = "bottom", strip.text.x = element_text(size = 12, face = "bold"))+
+  guides(color = FALSE)+
+  scale_size_continuous(name = "Total Combination")+
+  ggtitle(paste("Relation between Residues 399 and 518 with Other Residues"))+
+  geom_text(size = 3, vjust = -0.5, color = "black")+
+  opt.theme()
+## Last thing
+sessionInfo()
+```

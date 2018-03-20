@@ -1,0 +1,429 @@
+---
+title: "Landscape Composition Analysis in R"
+author: "Danielle Clake - R Wizardry Course (Winter 2017)"
+date: "12 April 2017"
+output:
+  pdf_document:
+    fig_cap: yes
+    fig_height: 4
+    fig_width: 5
+    highlight: pygments
+    keep_tex: yes
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, include = TRUE, eval = TRUE)
+```
+
+#Background
+Landscape ecologists and landscape geneticists often require an efficient way to quantify a landscape of interest. While mapping software such as ESRI's ArcGIS can be useful for viewing and manipulating spatial data and creating basic summaries, it does not allow for complex statistical analysis. The open source R software allows users both to do analysis of landscape data, and to use that data directly in further statistical analysis. This can be very useful, as it saves users from having to convert data between programs, and can allow a larger proportion of analyses to be automated. 
+
+This tutorial goes through an example of how to load and format spatial data, and gives one way to quantify the landscape composition within a certain radius (or set of radii) of given sample locations. It is meant for users with a baseline understanding of both the R program and spatial data. The tutorial begins with a brief overview on how to import and view spatial data in R, but for a more in-depth introduction users should refer to other sources such as the "Introduction to visualising spatial data in R" by Lovelace et al. (2017).
+
+After the introduction to spatial data in R, the technique described in this tutorial begins by converting land cover data from "vector" format (a set of spatially referenced points, lines, or polygons that are each assigned one or more attributes) to "raster" format (a continuous grid of pixels or "cells" which each have an assigned value - think of a digital image as an example, where the assigned value would be a specific colour for each pixel). Both formats have benefits and drawbacks when used in spatial analysis. For large, continuous datasets such as landscapes, raster data is often faster and more efficient to analyze. Therefore this tutorial will focus on techniques that use raster data. 
+
+Once landscape data is in raster format, the tutorial gives an example of how to modify the data classes if required (in this case the land cover classification is simplified in order to be more ecologically relevant). Then, users will be given an example of how to create "buffers", or polygons that incorporate a set distance around a starting location or feature. After buffers are created with the desired distance around the locations of interest, the land cover within each buffer is extracted and summarized as an R "list", which essentially lists the value of each pixel falling within a given buffer. The tutorial then takes the user through steps to find the frequency of each value (or land cover class) within each buffer, before turning that into a proportion and organising it into a table that can be more easily queried.
+
+The tutorial lastly provides code for a function which can summarize the land cover within many different buffer distances in one step. This is useful because often the most relevant spatial scale of analysis is not known *a priori*. Therefore, users can evaluate the landscape composition within several different distances at once.
+
+The summary data created using this technique can be used in many different applications of landscape ecology and landscape genetics. The land cover composition surrounding each sampling location in a study can be correlated with a variety of different demographic characteristics of the individuals sampled at that location. For example, previous studies have compared landscape composition to nest density (Jha & Kremen 2013, Knight et al. 2009), foraging distance (Redhead et al. 2016) and lineage persistence (Carvell et al. 2017) in bumble bees.
+
+While this tutorial uses land cover data, it should also be noted that the same techniques and functions used here can be applied to other raster datasets containing discrete categories, or modified for application to continuous datasets. For example, it could be used to determine the proportion of different elevation classes or soil regimes within the vicinity of points. It could also be scaled up or down in spatial extent depending on the research questions and organisms or mechanisms being studied.
+
+
+#Preparing Workspace
+##Load Packages
+This tutorial will use a number of existing R packages. The code below will streamline the installation and loading of these required packages. If packages are already installed and/or loaded users should skip the code below. Prompts to load packages will also be provided in text before the first time each package is used.
+```{r, eval = FALSE}
+x <- c("rgdal", "dplyr", "tmap", "raster", "rgeos", "tidyr", "ggplot2")
+```
+
+Uncomment the code below if you need to install packages:
+```{r, eval = FALSE}
+#install.packages(x)
+```
+
+Uncomment the code below to load the required packages (or load in text):
+```{r}
+#lapply(x, library, character.only = TRUE)
+```
+
+
+##Update working directory
+Prior to this tutorial, users should also set the default workspace to the folder where the tutorial data is stored. Update the file path in the code below accordingly.
+```{r, eval = FALSE}
+setwd("C:/User/Documents/University of Calgary/Courses/BIOL607_RWizardry/Final Project")
+```
+```{r, include = FALSE}
+setwd("C:/Users/Used/Documents/University of Calgary/Courses/BIOL607_RWizardry/Final Project")
+```
+
+#Part I - Displaying Map Data
+The first part of this tutorial will use three spatial datasets:
+
+1. The boundary of Banff National Park (located in Alberta, Canada) obtained from AltaLIS (http://www.altalis.com/)
+2. Land cover data from the Alberta Biodiversity Monitoring Institute (ABMI - http://www.abmi.ca) clipped to the area of Banff National Park
+3. Sampling locations spaced throughout the park.
+
+##Load data
+We will be using the **rgal** package to load our spatial data in R. This package has a function *readOGR* which requires two inputs: dsn (the "data source name") and the name of the layer. Since we have already set our default workspace, we just need to specify which folder the data is in ("shapefiles"), and the name of our data ("BanffNP_UTM12" etc.). Note that for this function we do not need to include a file extension after the data name.
+```{r, results = 'hide', warning = FALSE, message = FALSE}
+library(rgdal)
+BNP <- readOGR(dsn = "Data/BanffNP/shapefiles", layer = "BanffNP_UTM12")
+LC <- readOGR(dsn = "Data/BanffNP/shapefiles", layer = "Landcover_ABMI_2010_UTM12")
+SL <- readOGR(dsn = "Data/BanffNP/shapefiles", layer = "SamplingLocations_UTM12")
+```
+
+##View and modify data
+Spatial data in R has several different components, including:
+
+- The visual points, lines, or polygons (hereafter referred to as "features")
+- The data associated with each feature, organised in what is known as an "attribute table"
+
+We can view the features using the "plot" tool in base R:
+```{r, fig.height = 3.5, fig.width = 3.5}
+#view the Banff National Park outline:
+plot(BNP)
+
+#Add the sampling locations:
+plot(SL, add = TRUE) #(use code "add = TRUE" to add points to previous plot)
+```
+
+The line below can be uncommented to view land cover outlines as well, however it is a large file and will take several minutes to draw:
+```{r, eval = FALSE}
+#plot(LC, add = TRUE)
+```
+
+
+The attribute table for each layer can be accessed by using the code "@data". The land cover layer has over 6000 features, so we will use the *head* function to view data for only the first 6 features.
+```{r}
+head(LC@data)
+```
+
+As we can see, the land cover data from ABMI comes with a simplified numeric "LC_class". These numbers aren't meaningful to us in their current form, but luckily we have access to a lookup table that relates each numeric code to a land cover description. In the code below we will first open this data, then use the *left_join* function in the **dplyr** package to attach the descriptions to our existing file.
+```{r, results = 'hide', warning = FALSE, message = FALSE}
+library(dplyr) #load the dplyr package
+```
+
+```{r}
+#Load the look up table:
+LC_LUT <- read.csv("Data/BanffNP/Shapefiles/ABMI_LUT.csv", stringsAsFactors = FALSE)
+head(LC_LUT, 3) #view the first three lines of the look up table
+
+#Attach descriptions, matching "LC_class" to "Code":
+LC@data <- left_join(LC@data, LC_LUT, by = c("LC_class" = "Code")) 
+head(LC@data, 3) #check whether join worked
+```
+
+Because our join has added the land cover description under a rather generic "Name" column, let's rename it:
+```{r}
+colnames(LC@data)[colnames(LC@data) == "Name"] <- "LC_Desc"
+
+#Check which land cover classes we have in our data:
+unique(LC$LC_Desc) #We can use the "$" in place of "@data" here
+```
+
+##View map
+We can use the **tmap** package to quickly visualize our land cover data.
+```{r, results = 'hide', warning = FALSE, message = FALSE}
+library(tmap)
+```
+
+```{r}
+#Create palette for land cover types:
+LC.palette <- c("#26e026", "#3e7a3e", "#e2825f", "#ad8048", "#cff94f", 
+                "#4fc659", "#a9adaa", "#f7cb5b", "#ffffff", "#6cbdf7")
+
+#Create map of data:
+tm_shape(LC) + #Specify shapefile to be mapped
+  tm_fill("LC_Desc", palette = LC.palette,  title = "Land Cover") + #select fill data
+  tm_scale_bar(position = c("right", "top")) #add a scale bar
+```
+
+
+##Rasterize land cover data
+So far we have been displaying our land cover data as *vector data* - a continuous mosaic of polygons. However, continuous data such as this is often better displayed and analyzed as a *raster* (see background for a description of raster and vector data). In the code below, we will use the **raster** package to create an empty "template" raster, then assign the land cover values from our polygons to the corresponding pixels in the raster.
+```{r, results = 'hide', warning = FALSE, message = FALSE}
+library(raster)
+```
+
+First, create a template raster with the spatial extent ("ext") and projection ("crs") set to be the same as our polygon landcover layer ("LC"). We are using a resolution, or pixel size, of 100 map units (in this case metres).
+```{r}
+template.raster <- raster(ext = extent(LC), resolution = 100, crs = CRS(projection(LC)))
+```
+
+Next we essentially "stamp" our land cover polygons onto our template raster.
+```{r}
+#Caution - this step will likely take several minutes to run.
+LCrast <- rasterize(x = LC, y = template.raster, field = "LC_class", fun = 'last') 
+
+plot(LCrast) #lets see what our raster looks like!
+```
+
+
+##Simplify land cover categories
+Often the different land cover classes that have been created as relevant for humans are not relevant for the study species. For example, bumble bees may not experience rock/rubble any differently than exposed land. In order to simplify the data and any further analysis, we will simplify the land cover categories supplied in the ABMI data such that:
+
+- 20 + 31 = Ice/Water (1)
+- 32 + 33 = Exposed (3)
+- 34 = Developed (2)
+- 50 + 110 = Grass/Shrub (6)
+- 120 = Agriculture (4)
+- 210 + 220 + 230 = Forest (5)
+
+(where the numbers in brackets represent the new numerical "class" that we will asign the data).
+
+```{r}
+#First make a matrix to reclassify by:
+m <- c(20, 1, 31, 1, 32, 3, 33, 3, 34, 2, 50, 6, 
+       110, 6, 120, 4, 210, 5, 220, 5, 230, 5)
+lcrc <- matrix(m, ncol=2, byrow=TRUE)
+lcrc
+#in this matrix the first column represents the original class, and the second column
+#represents the new class that we will assign to it.
+
+#Then reclassify the raster:
+LCrastRC <- reclassify(LCrast, lcrc)
+
+#Make a new look up table for simplified land cover
+LCS.Code <- 1:6
+LCS.Desc <- c("Ice.Water", "Developed", "Exposed", "Agriculture", 
+              "Forest", "Grass.Shrub")
+LCS_LUT <- as.data.frame(cbind(LCS.Code, LCS.Desc))
+```
+
+
+#Part II - Spatial Analysis
+##Buffer sampling locations and extract values
+First we need to create "buffers", or circles with a set radius around our sampling locations. We will do this using the *gBuffer* tool in the **rgeos** package. We then can extract the landcover values within each buffer using the *extract* tool in the **raster** package.
+```{r, results = 'hide', warning = FALSE, message = FALSE}
+library(rgeos)
+```
+
+```{r}
+#Create 1000 m buffers around sampling locations:
+SL_buffer1km <- gBuffer(spgeom = SL, byid = TRUE, id = SL$id, width = 1000)
+plot(SL_buffer1km) #look at the buffers created
+
+#Extract number of pixels of each land cover class under each polygon:
+LC1km <- raster::extract(x = LCrastRC, y = SL_buffer1km) 
+#(because there is also an "extract" function in the tidyr dataset, we use
+#the "raster::extract" notation to specify that we want the raster function)
+
+#Find frequency of each land class within each polygon:
+LC1km.fq <- lapply(LC1km, table) 
+
+#Calculate proportion of land cover within each polygon:
+LC1km.pr <- lapply(LC1km.fq, FUN = function(x){x/sum(x)}) 
+```
+
+##Organize table for further analysis
+We now have a "list" in R that gives us the proportion of each land cover within 1 km of each polygon, but in order to assess the results further we will need to change formats and clean the data. 
+
+First we create a function that will extract the data from each item in the list (corresponding to each polygon, or sample location):
+```{r, results = "hide"}
+l2d <- function(x, lcpoly){
+  temp1 <- unlist(x[lcpoly])
+  temp2 <- as.data.frame(temp1)
+  names(temp2) <- paste("loc", lcpoly, sep="")
+  LC.class <- rownames(temp2)
+  final <- cbind(LC.class, temp2)
+  print(final)
+}
+```
+
+Next we will run the function for our first two sample locations:
+```{r}
+LCp1 <- l2d(LC1km.pr, 1)
+LCp2 <- l2d(LC1km.pr, 2)
+```
+
+Then merge the data frames created to create a starting data frame for the rest of the sample location data:
+```{r}
+km1 <- merge.data.frame(LCp1, LCp2, by.x = 1, by.y = 1, 
+                        all.x = TRUE, all.y = TRUE, sort = TRUE)
+```
+
+Finally, we run a for-loop to populate the data frame with data for the rest of the sample locations:
+```{r, results = "hide"}
+for(i in 3:length(unique(SL$id))){
+  temp <- l2d(LC1km.pr, i)
+  km1 <- merge.data.frame(km1, temp, by.x = 1, by.y = 1, 
+                          all.x = TRUE, all.y = TRUE, sort = TRUE)
+}
+```
+
+Let's look at our newly-populated data frame:
+```{r}
+str(km1[,1:6]) #Summarize structure of first 6 columns
+head(km1[,1:6], 5) #View first 5 lines of first 6 columns
+```
+
+As you can see, the data is listed so that each row corresponds to a unique land cover class. We want each row to correspond to a unique location, so we will transpose the data frame using the steps below:
+```{r}
+LCp.km1 <- as.data.frame(t(km1[,-1])) #transpose data frame
+colnames(LCp.km1) <- km1[,1] #replace column names in data frame
+LCp.km1[is.na(LCp.km1)] <- 0 #replace 'NA's in data frame with 0
+head(LCp.km1, 5) #look at the first 5 rows of transposed data frame
+```
+
+One last step is to convert the "row names" containing our site information to a new column:
+```{r}
+site <- rownames(LCp.km1) #Create new vector of row names
+rownames(LCp.km1) <- NULL #Set row names in existing data frame to null
+LCp.km1 <- cbind(site,LCp.km1) #add row name vector to data frame
+```
+
+All of the data is now in a data frame, but it is in "wide format", where there are multiple observations in each row. In R, the preferred format is "long format". We can convert to this "long format" using the *gather* tool in the **tidyr** package.
+```{r, results = 'hide', warning = FALSE, message = FALSE}
+library(tidyr)
+```
+
+```{r, warning = FALSE}
+LCp.km1.l <- gather(LCp.km1, key = "LC_Code", value = "LC_Prop", -site)
+
+#Now we can add the land cover names back in to the table:
+LC.1km <- left_join(LCp.km1.l, LCS_LUT, by = c("LC_Code" = "LCS.Code"))
+LC.1km$LC_Code <- as.factor(LC.1km$LC_Code)
+head(LC.1km, 3) #View first 3 lines of updated table
+```
+
+##Visualize results
+Now that our data is properly formatted, we can use **ggplot** to look at the distribution of different land cover classes across all of our locations.
+```{r, results = 'hide', warning = FALSE, message = FALSE}
+library(ggplot2)
+```
+
+```{r}
+ggplot(data = LC.1km, aes(x = LCS.Desc, y = LC_Prop)) + #set the x and y axes
+  geom_point() + #add points to the graph
+  labs(title = "Land Cover within 1 km of Sites in Banff National Park",
+       x = "Land Cover", y = "Proportion of Area Covered") + #update the title/axes labels
+  theme_bw() #change the look of the graph
+```
+
+We can see that the proportion of exposed land and forests within 1 km of each site is relatively well distributed between 0% and 100%. Grassland/Shrubland covers no more than 50% of the area within 1 km of any site, and developed land covers less than 10%.
+
+
+#Part III - Spatial Analysis Function
+Now we have data about the landcover within 1 km of each site. However, as mentioned in the background, often we do not have enough information about the distance within which the landcover will actually be significant. The code below includes a function that follows a similar workflow to what was done in Part II above, but for multiple buffer distances. It will create an output table that includes the land cover within a defined set of distances and requires the following inputs:
+
+1. "raster" - Land cover raster file
+2. "LUT" - A lookup table that links the raster values to land cover descriptions. It should be formatted as a data frame with 2 columns - the first column listing the codes, the second listing the descriptions.
+3. "samplocs" - Sample locations formatted as a shapefile with each location identified in a column named "id"
+4. "buffdist" - Distances of interest
+
+The function will then output a table giving the proportion of each type of land cover within each distance of interest.
+
+##Create function
+First we will build the function in R using the code below:
+```{r}
+LCAnalysis <- function(raster, samplocs, buffdist, LUT){
+  colnames(LUT) <- c("Code", "LC_Desc") #update column names in look-up table
+  if(!"id" %in% names(samplocs@data)){
+    print("Warning: Sample location naming error")
+  } #check that the samploc data has required "id" field, if not print warning
+  
+  l2d <- function(x, lcpoly){
+    temp.a <- unlist(x[lcpoly])
+    temp.b <- as.data.frame(temp.a)
+    names(temp.b) <- paste("SL", lcpoly, sep="")
+    LC.class <- rownames(temp.b)
+    cbind(LC.class, temp.b)
+  } #function to convert a list of land cover proportions at each point to a data frame
+  
+  #Create empty data frame for for loop:
+  LCdf <- data.frame(site = NA, LC_Code = NA, LC_Prop = NA, BDist = NA) 
+  
+  for(i in 1:length(buffdist)){
+    temp1 <- raster::extract(x = raster, y = samplocs, buffer = buffdist[i])
+    temp2 <- lapply(temp1, table)
+    temp3 <- lapply(temp2, FUN = function(x){x/sum(x)})
+    
+    SL1 <- l2d(temp3, 1)
+    SL2 <- l2d(temp3, 2)
+    temp4 <- merge.data.frame(SL1, SL2, by.x = 1, by.y = 1, 
+                              all.x = TRUE, all.y = TRUE, sort = TRUE)
+    
+    for(j in 3:length(unique(samplocs$id))){
+      temp5 <- l2d(temp3, j)
+      temp4 <- merge.data.frame(temp4, temp5, by.x = 1, by.y = 1, 
+                                all.x = TRUE, all.y = TRUE, sort = TRUE)
+    } #fill in data frame for each sampling location and each buffer distance
+    
+    LC <- as.data.frame(t(temp4[,-1])) #transpose data frame
+    colnames(LC) <- temp4[,1] #replace column names in data frame
+    LC[is.na(LC)] <- 0 #replace 'NA's in data frame with 0
+    
+    site <- rownames(LC) #convert row names (Site ID) to a new vector
+    rownames(LC) <- NULL #remove existing row names
+    LC <- cbind(site,LC) #add Site ID as a new column to data frame
+    
+    #Convert from "wide" to "long" format:
+    LC <- gather(LC, key = "LC_Code", value = "LC_Prop", -site) 
+    
+    BDist <- rep(buffdist[i], length(LC$LC_Prop)) #Create new column for buffer distance
+    LC <- cbind(LC, BDist) #add buffer distance column to data frame
+    
+    #Populate empty data frame with data for each new buffer distance:
+    LCdf <- rbind(LCdf, LC) 
+  }
+  LCdf <- LCdf[-1,] #remove "NA" row from data frame
+  LCdf <- left_join(LCdf, LUT, by = c("LC_Code" = "Code")) #Add land cover descriptions
+  LCdf$LC_Code <- as.factor(LCdf$LC_Code) #Convert land cover codes from character to factor
+  LCdf
+}
+```
+
+##Apply function to data
+Now that the function is built, it can be applied to our existing dataset.
+(*Note: you will likely get a warning saying that during the left join the factor will be coerced to a character - this can be ignored as it is taken care of later in the function*).
+```{r}
+BNP.LC <- LCAnalysis(raster = LCrastRC, samplocs = SL, 
+                     buffdist = seq(from = 500, to = 3000, by = 500), LUT = LCS_LUT)
+str(BNP.LC) #check structure of output table
+```
+
+##Graph results
+The graph created with the code below will show how the proportion of each landcover changes across buffer distances.
+```{r}
+ggplot(data = BNP.LC, aes(x = BDist, y = LC_Prop)) + #set data, and x and y axes
+  geom_point() + #add points
+  facet_grid(~LC_Desc) + #separate graphs so that there is one for each land cover
+  labs(title = "Distribution of Land Cover Classes", 
+       x = "Buffer Distance (m)", y = "Proportion of Land Cover") +
+  theme_bw() +
+  theme(axis.text = element_text(size = 7))
+```
+
+From this graph we can see that there is a relatively uniform spread of different proportions of exposed land, forest, and developed areas across all buffer distances, but that only a couple sites have a high proportion of grassland/shrubland and ice/water, and only within the smaller buffer distances.
+
+This kind of data output can help when assessing sites prior to field work, to ensure that there is a suitable distribution of landcover at all scales. It could also be used as input for further analysis into demographic correlations with land cover at various scales of influence.
+
+
+#Bibliography
+##References
+Carvell, C. et al. (2017). Bumblebee family lineage survival is enhanced in high quality landscapes. *Nature* **543**: 547-549.
+
+Jha, S. & Kremen, C. (2013). Resource diversity and landscape-level homogeneity drive native bee foraging. *Proceedings of the National Academy of Sciences* **110**: 555-558.
+
+Knight, M. et al. (2009). Bumblebee nest density and the scale of available forage in arable landscapes. *Insect Conservation and Diversity* **2**: 116-124.
+
+Lovelace, R. & Cheshire, J. (2014). Introduction to visualising spatial data in R. *National Centre for Research Methods Working Papers*, **14**(03). Retrieved April 2017 from https://github.com/Robinlovelace/Creating-maps-in-R 
+
+Redhead, J. et al. (2016). Effects of habitat composition and landscape structure on worker foraging distances of five bumble bee species. *Ecological Applications* **26**: 726-739.
+
+
+##Data Sources
+Alberta Biodiversity Monitoring Institute. (2014). ABMI Wall-to-wall Land Cover Map 2010 Version 1.0. Retrieved March 2017 from http://www.abmi.ca/home/data-analytics/da-top/da-product-overview/GIS-Human-Footprint-Land-Cover-Data/Land-Cover.html
+
+AltaLIS. (2016). 20K Base Features - Geoadministrative Areas - National Park Polygons. Retrieved July 2016 from http://www.altalis.com/products/base/20k_base_features.html
+
+
+#Appendices
+##Apendix I: Session Info
+```{r}
+sessionInfo()
+```
+

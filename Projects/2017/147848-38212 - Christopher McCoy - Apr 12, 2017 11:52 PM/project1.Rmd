@@ -1,0 +1,444 @@
+---
+title: "Structural Prediction of Proteins"
+author: "Chris McCoy"
+date: "29 March 2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# 1. Introduction
+
+In living cells, proteins are the biological machines responsible for completing most of the biological functions. Being a versatile type of macromolecule, proteins have been found to be involved in virtually every cellular/biological process including, but not limited to; replicative and transcriptional roles with DNA, cellular division and metabolism, and cellular signalling (Alberts *et al*, 2002). To understand how a cell functions , it is therefore necessary to understand explicitly the mechanisms by which the individual proteins complete their specific roles in the cell.
+
+Structural Biology is a branch of biophysics that focuses on the characterisation of the physical structure of biological molecules. Understanding the physical structure of the way a protein, from its secondary structure, to its specific folding to build up its tertiary and quaternary is a fundamental part of understanding how and why a particular protein functions and interacts within a cell.  
+Proteins are made up of amino acids, which do not remain as a straight chain. These chains fold and twist to form secondary structures which in turn can orientate themselves in a particular fashion to create recognisable motifs. Although it is easy to determine a protein amino acid sequence, currently, there is no all-encompassing methodology or code to predict how a protein folds. Therefore, to determine protein structure, to gain knowledge on how a protein functions and how alterations in their structures can affect their function, experimental methods are needed. From this we can understand how to influence protein-protein interactions and mutations which can drastically change the behaviour of proteins. This is important in many branches of science, including structure based drug design for pharmaceuticals (Scapin, 2006).
+
+Due to biomolecules, such as proteins, being too small to visualise in any detail using light microscopy techniques many structural biology techniques have been developed including; mass spectrometry, NMR, SAXS, X-ray crystallography etc. X-ray crystallography is a powerful structural tool, resulting in almost 10-fold the number of macromolecular structures than the nearest competing structural technique (RCSB Protein Data Bank, 2010), and is less restricted in terms of molecular size than other competing techniques.
+
+Despite this success, x-ray crystallography has a number of drawbacks associated with the technique. The first of which is that the sample needs to be present in a large enough quantity to be studied. Secondly the sample needs to be in an incredibly pure state, and also needs to be structured enough (no intrinsically disordered domains) to form protein crystals. Rough estimates put the cloning a purification procedures up to six months and the crystallisation procedures at approximately 1-12months (Drenth, 2007). 
+
+Being able to predict protein/macromolecule structures before any structural biology techniques, based on the properties of the individual amino acids, and on existing protein structures would allow us to design constructs that are likely to be well behaved, easy to purify and well structured. This would serve to save a large amount of time instead of iteratively trying a large number of different constructs to see which works best. 
+
+Although numerous server-based structure prediction servers and programs already exist, inputting and running an entire protein sequence can be time consuming. Using R and the Chou Fasman structure prediction method (Chou *et al.*, 1974), we are able to quickly screen our protein sequence for regions that might be of interest, using more basic parameters. From here smaller sequences can be submitted to such programs for more in depth analysis or used directly as boundaries for cloning/purification/crystallisation. R's graphical interface allows us to easily see regions of likely structured protein, from numerous methods such as the PDB blast or a-helix/b-sheet prediction on one output allowing us to compare different prediction results, which would have required us to input our data into numerous prediction programs, in one program allowing us to easily compare the results of different prediction criteria, giving more certainty in our predictions. Also using the "seqinr" package and the "aaindex" we can continue to add even more criteria in the future when predicting structures. The current program currently only takes advantage of the propesity values of amino acids for a-helix or b-sheet but other criteria, such as amino acid hydrophobicity for example could easily be added.
+
+
+# 2. Loading and formatting information from our gene of interest
+
+```{r}
+rm(list=ls(all=TRUE))
+
+###############################################################################################
+################################## Installing Packages ########################################
+###############################################################################################
+
+
+install.packages("ggplot2", repos = "http://cran.us.r-project.org")
+install.packages("seqinr",repos = "https://cran.rstudio.com/bin/windows/contrib/3.3/seqinr_3.3-6.zip")
+install.packages("bio3d", repos = "http://cran.us.r-project.org")
+
+###############################################################################################
+#################################### Loading Packages #########################################
+###############################################################################################
+
+                             
+library("ggplot2")
+library("seqinr")      #https://cran.r-project.org/web/packages/seqinr/seqinr.pdf
+
+sessionInfo()        #show packages loaded in the current R session
+
+###############################################################################################
+##################################### Setting the WD ##########################################
+###############################################################################################
+
+setwd("C:/Users/Chris McCoy/Documents/Calgary/Modules/R Programming/Project/Project Directory") #set the working directory
+getwd()                                                                                         #get the working directory
+dir()                                                                                           #show files saved in the working directory
+
+###############################################################################################
+####################################### Loading Data ##########################################
+###############################################################################################
+
+data("aaindex", package= "seqinr")                 #Load List of 544 physicochemical and biological properties for the 20 AA from the seqinr package
+#aa.index                   
+ 
+#http://www.ebi.ac.uk/ena/data/view/CAC39247       #location of the FASTA file used as the example in this code. Can download FASTA for any gene of interest
+Smc5 <- read.fasta("CAC39247.fasta")               #Read the downloaded and saved fasta file from working directory for gene of interest
+Smc5                                               #Prints fasta file
+
+dna_seq <- Smc5$`ENA|CAC39247|CAC39247.1`          #stores the DNA sequence from the FASTA file as an object in environment
+dna_seq <- as.vector(dna_seq)                      #Takes DNA sequence from dna_seq object and saves as a character vector
+dna_seq                                            #Prints dna_seq variable
+
+
+#dna_seq_string <- paste(dna_seq, sep="", collapse="")   #Takes our dna_seq vector and converts into one string (can use c2s function in seqinr package. 
+
+aa_seq <- getTrans(dna_seq)                               #Get the amino acid translation from our dna_seq object
+#aa_seq_string <- paste(aa_seq, sep="", collapse="")      #The amino acid sequence as a string
+
+AAstat(aa_seq, plot=FALSE)                                #Returns simple protein sequence information including the number of residues, the percentage physico-chemical classes and the theoretical isoelectric point. Input seq in character vector format
+AAstat(aa_seq, plot=TRUE)                                 #if Plot=TRUE, plots the presence of residues splitted by physico-chemical classes along the sequence
+
+#the AAstat plot illustrates the versatility of the "seqinr" package and shows a fraction of the other biochemical and biophysical properties of amino acids which could be utilised and added to the code when designing other prediction criteria.
+
+
+```
+
+
+# 3. Using the Chou-Fasman Method for Secondary Structure Prediction
+
+Protein structure determination and prediction has long been an important part of the field of biophysics/bioinformatics because of the importance of protein structure in understanding the biological and chemical processes of cells/organisms.
+
+The Chou-Fasman method, is a secondary structure prediction method, which largely relies on probability parameters (propensity values) (P) determimed from relative frequencies of each amino acids appearance in each type of secondary structure (Chou *et al.*, 1974). This algorithm is an empirical method that favors speed over accuracy, intended for generalizing secondary structure at a glance (Chen *et al.*, 2006).
+
+The probability parameters (propensity values, P) for each amino acid can be loaded from the aaindex function in the "seqinr" package (Kawashima *et al*, 2000)(Tomii *et al*, 1996)(Nakai *et al*, 1988).
+
+
+The aaindex function in "seqinr" returns a collection of published indices, or scales, of numerous physicochemical and biological properties of the 20 standard aminoacids
+
+The format of the aaindex;
+
+A list of 544 named indeces each with the following components:
+
+H character vector: Accession number.
+D character vector: Data description.
+R character vector: LITDB entry number.
+A character vector: Author(s).
+T character vector: Title of the article.
+J character vector: Journal reference.
+C named numeric vector: Correlation coefficients of similar indeces (with coefficients of 0.8/-0.8 or more/less). The correlation coefficient is calculated with zeros filled for missing values.
+I named numeric vector: Amino acid index data.(Kawashima *et al*, 2000)(Tomii *et al*, 1996)(Nakai *et al*, 1988)
+
+
+```{r}
+###############################################################################################################
+### Retrieving the relative frequencies of each amino acids appearance in each type of secondary structure ####
+###############################################################################################################
+
+
+#which(sapply(aaindex, function(x) length(grep("Chou", x$A)) !=0))      #Give alls the indices which have the author "Chou"
+
+# Aplha Helix frequencies - pulling the amino acid propensity (P) values for an Alpha helix
+
+aaindex[[38]]$D               #Indicies 38 Data description. "Normalised frequency of aplha-helix"
+aaindex[[38]]$I               #Amino acid index(38) data. P(alpha-helix) data for each amino acid 
+P_ahelix <- aaindex[[38]]$I   #Save as vector(Named number)
+P_ahelix
+
+# Beta sheet frequencies - pulling the amino acid propensity (P) values for a B Sheet
+
+aaindex[[39]]$D                #Indicies 39 Data description. "Normalised frequency of betasheet"
+aaindex[[39]]$D                #Amind acid index(39) data. P(b-sheet) data for each amino acid
+
+P_bsheet <- aaindex[[39]]$I    #Save as a vector (Named number)
+P_bsheet
+
+# Beta turn frequencies
+
+aaindex[[37]]$D                #Indices 37 Data description. "Normalized frequency of beta-turn"
+aaindex[[37]]$I                #Amino acid index(37) data. P(turn) data for each amino acid
+P_turn <- aaindex[[37]]$I                                                 
+
+# Frequencies of the first, second and third residue in a turn 
+
+aaindex[[49]]$D                #Indices 48 Data description. "Frequency of the 1st residue in turn"
+f_i <- aaindex[[49]]$I         #Amino acid index(49) data. f(i) in Chou-Fasman method. Save as vector
+f_i1 <- aaindex[[50]]$I        #Amino acid index (50) data. f(i+1) in Chou-Fasman method.
+f_i2 <- aaindex[[51]]$I        #Amino acid index (51) data. f(i+2) in Chou-Fasman method
+f_i3 <- aaindex[[52]]$I        #Amino acid index (52) data. f(i+3) in Chou-Fasman method
+
+#Although this code will focus only on the A-helix and B-sheet prediction, the above pulled values can also be used to predict other types of secondary structure such as B-turns
+
+#Correcting the values - for ease of use
+
+P_ahelix <- P_ahelix * 100
+P_bsheet <- P_bsheet * 100
+P_turn <- P_turn * 100
+
+#Storing all frequencies in matrix
+
+Raw_Data <- cbind(P_ahelix, P_bsheet, P_turn, f_i, f_i1, f_i2)           #Bind vectors of index data into a matrix, name Raw_Data
+print(Raw_Data)
+
+#Convert matrix into data frame
+
+P_Table <- as.data.frame(Raw_Data)                                       #Convert Raw_Data into a data frame
+
+#Create column for 3 letter amino acid code
+
+P_Table$Amino_Acid <- row.names(Raw_Data)                                #Create new column from Row names (the amino acid 3letter code)
+
+#Convert 3 letter amino acid code into 1 Letter code, add as a column in data frame
+
+P_Table$Letter_Code <- a(P_Table[,7])                                    #Create new column converting the 3ltter code in column 7 into the single ltter code for an aa acid using a() function
+print(P_Table, row.names = FALSE)
+
+```
+
+
+# 4. Chou-Fasman Prediction of A-helices and B-sheets
+
+To determine the type of secondary structure the amino acid chain will form we must first calculate the a-helix/bsheet nucleation point. This is dependent on how many a-helix/b-sheet "makers" and how many a-helix/b-sheet "breakers" we have in the sequence we inspect. The propensity for an amino acid to be a "maker" or "breaker" is usually determined by the R side group. 
+In the Chou Fasman method, it is considered;
+
+If 6 continuous/adjacent residues have more than a third (2) of a-helix breakers (P_ahelix < 103) then it should not form a helix
+
+If 5 continuous/adjacent residues have more than a third (2) of b-sheet breakers (P_bsheet < 105) it should not form a b-sheet
+
+After we have determined a nucleation point for a particular secondary structure, we continue to extend the query sequence by one amino acid in both directions, until it is terminated, by a sequence of 4 amino acids (at the end of the query) with an average P_ahelix<103 for an alpha-helix or 3 amino acids (at the end of the query) with an average P_bsheet<105 for a B-sheet (Chou *et al.*, 1974).
+
+
+```{r}
+#####################################################################################################################
+########################################  Determining A-helix regions  ##############################################
+#####################################################################################################################
+
+z <- NULL             #Creating objects to be used in the code
+x <- 0                #x is the position along the amino acid sequence to begin scanning
+y <- x + 5            #y is the 6th (final) amino acid position in the sequence of 6 being scanned
+ahelix_boundaries <- NULL
+
+while(y <= length(aa_seq)-1){             #while y(the last amino acid in the sequence of 6 being analysed) is <= the length of the aa seq
+  temp <- NULL                            #empty vector to store the Propensity(alpha) values for each aa in the sequence of 6
+  while((length(temp[temp > 103])) < 4){  #checks that there is less than 4 values (Palpha) over the threshold of 103
+  temp <- NULL                            #Clears the temp value, important so values from the first iteration are not present in the 2nd
+      x <- x + 1                          #the 1st amino acid in the sequence of 6 being analysed moves one along the total aa sequence.
+      y <- y + 1                          #the last amino acid in the sequence of 6 being analysed moves one along the total aa sequence
+      if(y > length(aa_seq)-1){           #if y ever reaches the end of the aa sequence, break the loop
+        break
+      }
+for(i in x:y){                                  #for each aa between the scanning/analysis boundaries (of 6 aa)
+  temp[i] <- P_Table$P_ahelix[grepl(aa_seq[i], P_Table$Letter_Code)] #Use aa letter code, search for matches in Ptable, then pull the Pvalue, stores
+  temp <- temp[!is.na(temp)]                 #remove the NAs from temp. Na introduced after first iteration (x=2), as pos.1 in temp will be empty etc
+    if((length(temp[temp > 103])) >= 4){     #if the temp now has 4 Pa above threshold, is a nucleation point and break the while loop. else restart
+    break
+    }
+  }                                     #if a nucleation point is found need to extend helix in both directions
+  } 
+  if(y > length(aa_seq)-1){             #if y ever reaches the end of the aa sequence break the extension loops
+    break
+  }
+  temp1 <- 104                          #Set temp1 greater than 103 (threshold value), so can pass into the first iteration
+  while((mean(temp1))>103){             #while the average of temp1(the 4 left most aa) > than the threshold value. When below will terminate. x is then left boundary
+  temp1 <- NULL                         #clear temp1, vector where will store Palpha values
+  x <- (x-1)                            #takes the left nucleation boundary-1, this moves the left most amino acid being analysed 1 position back along the aa sequence
+  for(i in ((x):(x+3))){                                                #takes the shifted nuc. boundary, runs for loop from this position and the next 3
+    temp1[i] <- P_Table$P_ahelix[grepl(aa_seq[i], P_Table$Letter_Code)]  #Use aa letter code, search for matches in Ptable, then pull the Pvalue, stores
+    temp1 <- temp1[!is.na(temp1)]       #remove the NAs from temp. Na introduced after first iteration (x=2), as pos.1 in temp will be empty etc
+    }                                   #after for loop completes, the 4 aa Pa values are passed into the while loop.
+}
+  temp2 <- 104                          #Set temp2 greater than 103 (threshold), so can pass into the first iteration
+while((mean(temp2))>103){               #while the average of temp2(the 4 right most aa) > than the threshold value. When below will terminate. y is then left boundary
+  temp2 <- NULL                         #clear temp1, vector where will store Palpha values
+  y <- (y+1)                            #takes the right nucleation boundary+1, this moves the right most amino acid being analysed 1 position along the aa sequence
+  for(i in ((y-3):y)){                                                   #takes the shifted nuc. boundary, runs for loop for the 4 right most aa
+    temp2[i] <- P_Table$P_ahelix[grepl(aa_seq[i], P_Table$Letter_Code)]  #Use aa letter code, search for matches in Ptable, then pull the Pvalue, stores
+    temp2 <- temp2[!is.na(temp2)]       #remove the NAs from temp. Na introduced after first iteration (x=2), as pos.1 in temp will be empty etc
+  }                                     #after for loop completes, the 4 aa Pa values are passed into the while loop.
+}
+  z <- mean(temp)                       #mean of the original temp file. Use this as measure of likelihood when both A helix and B sheet are predicted at the same place
+  ahelix_boundaries <- rbind(ahelix_boundaries, c(x, y, z))    #combining the helix boundaries and mean Palpha for this iteration into a data frame
+  x <- y                                #make the starting point for the overall while loop equal to the position where the previous helix ended
+  y <- x + 5                            #make the left most amino acid of the sequence being analysed (in the first loop) 5 residues after the first in the sequence.
+}
+ 
+print(ahelix_boundaries)  
+
+
+############################################################################################################################
+################################################ Predicting B-sheets #######################################################
+############################################################################################################################
+
+#The concept behind the code for predicting B-sheets is very similar to that for predicting a helices. However the threshold value is raised to 105 from 103, the range of amino acids in the sequence being analysed is 5 for B sheets as opposed to 6 for a helices. Also only 3 of the 5 need to be above the threshold to determine whether a sequence is a nucleation point or not. The propensity values the for loops pull from the P_Table, are the P(b_sheet) values as opposed to the P(a_helix) values. 
+
+z <- NULL
+x <- 0
+y <- x + 4
+bsheet_boundaries <- NULL
+
+while(y <= length(aa_seq)-1){
+  temp <- NULL
+  while((length(temp[temp > 105])) < 3){          
+  temp <- NULL 
+      x <- x + 1
+      y <- y + 1
+      if(y > length(aa_seq)-1){
+        break
+      }
+for(i in x:y){                                  
+  temp[i] <- P_Table$P_bsheet[grepl(aa_seq[i], P_Table$Letter_Code)] 
+  temp <- temp[!is.na(temp)]                    
+    if((length(temp[temp > 105])) >= 3){           
+    break
+    }
+  }
+  } 
+  if(y > length(aa_seq)-1){
+    break
+  }
+  temp1 <- 106                                                          
+  while((mean(temp1))>105){                                               
+  temp1 <- NULL                                                         
+  x <- (x-1)                                                            
+  for(i in ((x):(x+3))){                                                
+    temp1[i] <- P_Table$P_bsheet[grepl(aa_seq[i], P_Table$Letter_Code)] 
+    temp1 <- temp1[!is.na(temp1)]                                       
+    }
+}
+  temp2 <- 106
+while((mean(temp2))>105){
+  temp2 <- NULL
+  y <- (y+1)
+  for(i in ((y-3):y)){
+    temp2[i] <- P_Table$P_bsheet[grepl(aa_seq[i], P_Table$Letter_Code)]
+    temp2 <- temp2[!is.na(temp2)]
+  }
+}
+  z <- mean(temp)
+  bsheet_boundaries <- rbind(bsheet_boundaries, c(x, y, z))
+  x <- y
+  y <- x + 4
+}
+  
+print(bsheet_boundaries) 
+
+
+################################################################################################################## 
+############################################ Plotting the CF Results #############################################
+##################################################################################################################
+
+
+colnames(ahelix_boundaries) <-c("start", "end", "mean_P")  #Change the column names of the table, so that they are consistent with the names for the Bsheet table
+ahelix_boundaries <- as.data.frame(ahelix_boundaries)      #Convert the table into a dataframe
+ahelix_boundaries$type <- rep("a-helix", length(ahelix_boundaries$mean_P)) #Add an extra column which labels all these domains as a-helix
+
+
+colnames(bsheet_boundaries) <- c("start", "end","mean_P")  #Change the column names of the table, so that they are consistent with the names for the a helix table
+bsheet_boundaries <- as.data.frame(bsheet_boundaries)      #Convert the table into a dataframe
+bsheet_boundaries$type <- rep("b-sheet", length(bsheet_boundaries$mean_P)) #Add an extra column which labels all these domains as b-sheet
+
+Gene_str_boundaries <- rbind(ahelix_boundaries, bsheet_boundaries) #row bind the dataframes for the a-helix boundaries and the b-sheet boundaries
+
+
+
+plot1 <- ggplot(data=Gene_str_boundaries, aes(x=type, ymin= start, ymax=end, colour=mean_P))
+plotCF <- plot1 +
+  geom_linerange(size=20)+
+  coord_flip() +
+  labs(title="Secondary Structure Prediction", y="Amino Acid Residue no.", x="Secondary Structure Type")+
+  scale_fill_manual(name="Mean P")
+  
+plotCF
+
+
+```
+
+
+The plotCF returns the predicted alpha helix domains and beta sheet domains and their locations along the amino acid sequence being analysed to an accuracy of between 68-80%. Application of this method assist the studying of the correlation between protein structure and biological activity, and also be an aid in x-ray crystallography when interpreting data. The data can also be useful when deciding boundaries within the protein to express and trucation product to increase the likelihood of soluble, protein which is more likely to crystallise. When designing crystallisation constructs, we need to select for well structured or folded domains. Using the plotCF we can determine where along the amino acid sequence we have secondary structure. Using the mean P value we can also quatify the likelihood of this structure existing in addition to deciphering between an alpha helix secondary structure and a beta sheet, by taking the structure which has the higher mean P value at that point. Regions where there is no prediction are likely to be coils or disordered regions and should be avoided if possible and these regions introduce flexibility into the protein, which could be problematic during the crystallisation phase. R allows us to easily visualise these regions of interest whilst also allowing the user to expand the code to add in additional variables to analyse the sequence (Chen *et al.*, 2006). For example if the user desired to determine interaction regions, the user could plot the hydrophobicity of each amino acid in the sequence and look for regions of hydrophobic patches. 
+
+# 5. Using PDB BLAST for structure prediction
+
+BLAST, one of the most popular pairwise sequence comparison algorithms for database searching, performs gapped local alignments via a heuristic stratgey: it identifies short near exact matches or hits, bidirectionally extends non-overlapping hits resulting in ungapped extended hits or high-scoring segment pairs (HSPs), and finally extends the highest scoring HSP in both directiosn via a gappeed alignment (Altschul et al 1997). Using BLAST we can determine regions of homology between our protein sequence of interest and existing protein structures and use this as an estimate of regions that are likely to form well folded domains and likely be structured well enough for protein characterisation via X-ray crystallography.
+ 
+ 
+
+```{r}
+#Load bio3d package
+
+library(bio3d)
+
+#Bio3d can access several databases with blast.pdb, including the protein databank, non-redundant protein sequences and swissprot
+#As we want to define regions on our protein sequence of interest that are likely to be well structured and folded, homology will be searched for against the protein data bank, which contains the coordinates of already defined protein structures. 
+#Areas of homology between our query sequence and already characterised (and therefore likely well folded/structured) proteins can be a good indication of boundaries in our sequence which are likely to follow a similar folding/structured pattern and therefore be areas that will be well well behaved during protein purification and crystallisation.
+
+#blast the sequence vs the pdb, save as an object, this may take some time, depenedent on length oF the sequence being searched, internet speed and server speed.
+
+blast_results <- blast.pdb(aa_seq, database = "pdb", chain.single=TRUE)  #blast the aa sequence of interest, against a defined database, save results as named object
+
+blast_results
+
+#Plot summary statistics of the pdb blast
+#plotting the blast results gives a graphical output for the E-value, bitscore identity and length for each hit. The E value, is used to determine the significance of the blast results. A higher -log(E) indicates a higher significance. (Unlike the raw score, this score is independent og the substitution matrix and the query database lengths, and thus is comparable between BLASTP searches).
+
+plot(blast_results)
+
+#remove duplicates
+
+UniqueBlasts <- blast_results$hit.tbl[!duplicated(blast_results$hit.tbl$subjectids),] #remove duplicate entries based on the subjectids
+
+UniqueBlasts
+
+#Can get different isoforms of the same protein. These are essentially duplicate entries, but however will not be removed with the above code as they have a different letter at the end of their subject id. As these hits will have the same statistical scores so can remove duplicates by removing the duplicates based on the evalue
+
+UniqueBlasts <- UniqueBlasts[!duplicated(UniqueBlasts$evalue),] #remove duplicate entries based on the evalue
+
+UniqueBlasts
+
+#Dont want really small fragments, when expressing proteins, want to express sequences which have biological interest, so want the sequence to be long enough to form some sort of folded domain or structure or functional domain. Also small sequences are less likely to be of significant interest, as the sequence length increases, it is more likely that the homology of the amino acid sequence will correlate with homologous structure. So next will subset by fragments longer than a particular length >100
+
+UniqueBlasts <- UniqueBlasts[(UniqueBlasts$alignmentlength > 100), ] #subset UniqueBlasts, all columns, and only rows where the alignment length >100
+
+UniqueBlasts
+
+#Ordering the results by -logE (Significance)
+
+UniqueBlasts <- UniqueBlasts[order(UniqueBlasts$mlog.evalue)] #order the remaining hits by the significance
+
+
+#Saving the top 10 signifcant blast results
+
+UniqueBlasts <-UniqueBlasts[1:10, ] #subset, all columns, rows 1 to 10. As ordered by significance already, these will be the 10 most significant hits, matching the other                                      subsetting criteria.
+
+UniqueBlasts
+
+############################################################################################################################
+########################################### Plotting the BLAST results #####################################################
+############################################################################################################################
+
+plot2 <- ggplot(data=UniqueBlasts, aes(x=UniqueBlasts$subjectids, ymin= UniqueBlasts$q.start, ymax=UniqueBlasts$q.end, colour=identity))
+
+plotBlasts <- plot2 +
+  geom_linerange(size=10)+
+  coord_flip() +
+  labs(y="Amino acid no.", x="Subject ID", title= "Sequence alignment with PDB")
+plotBlasts
+
+```
+
+
+The plotBlasts returns the regions of homology of the top ten significant hits from the BLAST against the PDB along the amino acid sequence of our protein of interest. In a similar way to the plotCF this data can assist the studying of the correlation between protein structure and biological activity (by comparing our protein of interest with the biological activity of the PDB hits) and also be an aid in deciding boundaries to be used for protein trucations for structural biology applications, such as x-ray crystallography. The regions of homology represent locations on our protein which show homology with proteins that have already been structurally characterised. Therefore we can determine regions on our protein which are more likely to be characterisable by structural methods, and also have an idea of the conditions in which our regions of homology can be crystallised (if the hit is an x-ray crystallography structure). This allows us to speed up the protein purification/characterisation pipeline by assuming our regions of homology will act in a similar way to previous successful structural characterisation. 
+
+# 6. References
+
+Chou P.Y. & Fasman G.D. (1974). Prediction of Protein conformation. *Biochemistry*. 13 (2), 222-245.
+
+Chen H, Gu F. & Huang, Z. (2006). Improved Chou-Fasman method for protein secondary structure prediction. *BMC Bioinformatics*. 7 (S4).
+
+Alberts B, Johnson A, Lewis J, et al (2002).Analyzing Protein Structure and Function. 4th edition. New York: Garland Science.*Molecular Biology of the Cell*.
+
+Kawashima, S. and Kanehisa, M. (2000) AAindex: amino acid index database. *Nucleic Acids Res.*, 28:374.
+
+Tomii, K. and Kanehisa, M. (1996) Analysis of amino acid indices and mutation matrices for sequence comparison and structure prediction of proteins. *Protein Eng.*, 9:27-36.
+
+Nakai, K., Kidera, A., and Kanehisa, M. (1988) Cluster analysis of amino acid indices for prediction of protein structure and function. *Protein Eng.* 2:93-100.
+
+"PDB Statistics". RCSB Protein Data Bank. Retrieved 2010-02-09.
+
+Scapin G. (2006). Structural biology and drug discovery. *Curr. Pharm.* Des. 12 (17): 2087-97.
+
+Altschul S.F., Madden T.L., Schäffer A.A., Zhang J., Zhang Z., Miller W. & Lipman D.J. (1997). Gapped BLAST and PSI-BLAST: a new generation of protein database search programs. *Nucleic Acids Res*, 25(17), 3389-3402.
+
+Drenth J.(2007) *Principles of Protein-Xray Crystallography* 3rd ed.
+
+```{r}
+
+sessionInfo()
+
+```
+
+

@@ -1,0 +1,517 @@
+---
+title: "R WIZARDRY FINAL PROJECT 2017"
+author: "CHRIS HOOEY"
+date: '2017-03-29'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. 
+
+###############################################################################################
+
+The following R Script tutorial is to ultimately demonstrate how to display transcriptomic data from a Kallisto abundance matrix output as either a PCA or a Heatmap.
+
+The first phase of this tutorial involves reading in all the required data and transforming the data input into savable files to be uploaded later as needed. 
+The first objective is to read each file into R individually and then add a column filled with the sample number to identify the sample once all the sample files are consolidated. 
+The second objective is to consolidate the multiple RNA-Seq data sample files into a single dataframe composed of all the sample data identifiable by the original sample number. 
+The third objective involves converting given sample data (tpm) into a more useful number (FPKM) with multiple identical example calculations provided. 
+The fourth objective is to combine the original "origin data" (usually from an EXCEL file) and the connection data between the Trinity ID and the NCBI gene accession ID to the newly created data frame, to preserve all the original sample info and provide a functional reference using the gene accession ID.The file "trinity2refid_diamond.txt" which contains the link between Trinity ID sequences and the NCBI gene accession ID was created by a biostatistician using Perl software and the NCBI RefSeq database by BLASTing the Trinity created transcript sequences against the NCBI RefSeq database.
+The fifth objective is to save the created data frame using the write.csv function to save time in the future from recreating it and keep it stored to read in later or use as a reference. 
+
+The second phase of this tutorial involves using the created and saved data frame, complete with sample info and gene accession IDs, to search a specified online NCBI (gene) data base to return functional protein info using a given NCBI gene accession ID as the search term.
+Using the R package "rentrez" the function "entrez_search" can search through a specified NCBI database of choice using a given term to return a list of results. Use entrez_dbs() to find the list of available databases to search through, returns 48 options as of April 2017. Once the NCBI database of interest is selected then the function entrez_db_summary("gene") can be used to provide a brief description about the ("gene") database. The function entrez_db_searchable("gene") provides a set of searchable field types for terms that can be used with the chosen database. The function entrez_db_links("gene") provides a set of databases that might contain linked records to the selected database. 
+
+A practice run of "entrez_search" using a single term is recommended to ensure proper function and desired results before building a for-loop. Once the practice run has been completed successfully to yield the desired results, in the case of this tutorial, the protein description information for the named term = NCBI Gene Accession ID, a for-loop can be created to run for all sample Gene Accession IDs. Before the for-loop can be created an empty dataframe must be constructed to be filled with the "entrez_search" returned list data.  Once the for-loop has finished running and  filled the data frame with the desired information, including but not limited to (gene_ID, description, organism, nomenclaturesymbol) the dataset should be saved or written out to the set directory using the write.csv function to save time in the future from rerunning the for-loop.  
+
+The final phase that should take place before visualization of the data is the consolidation of all the created data frames into a single "Complete Dataset". This complete dataset should be saved for future reference and to save time later on. The Complete Dataset can be used with its included protein description information, gene accession IDs and Trinity target IDs to create visualizations such as a PCA or a heatmap based on RNA-Seq expression values (FPKM or TPM). 
+
+When visualizing data as a PCA a wide data frame format is needed. To make the most out of the visualization, a refined set of limited variables should be created from the Complete Data set. Using a refined set of data allows for a more clear visualization of the factors under review. In the case of this tutorial the PCA will analyze "Site" similarity using a limited gene set of DEG determined by a Sleuth analysis. Due to multiple target IDs matching a single gene ID it is best to use the unique target IDs to reduce sorting difficulties within the program. The results of the PCA in this tutorial will include 2 seperate PCA charts. The first PCA will be an excellent visual of an Individuals factor map, the second will produce a poor crowded Variables factor map.
+
+Visualizing the data using a heatmap involves transforming the Complete Dataset into a condensed matrix composed of only the variables required for visualization. The first step involves reducing the desired genes to be visualized, in this case using the DEG from a Sleuth analysis.  Next add a column of the log transformed FPKM values in the Complete dataset to the condensed dataset which will be used for expression visualization information. Load in the reshape2 package into R for the dcast function needed later. Next create a new column in the condensed dataset composed of the independant variables using the paste function (Site & Sample). Further condense the created matrix dataset by limiting the columns used for visualization ("sampleID", "target_id", "gene_ID", "logFPKM"). Using the function dcast will reshape the condensed dataset matrix into wide format allowing for the merging of the protein names from a seperate dataset to add functional information to the heatmap. The next step involves simplifying and normalizing "temp" vector data from "matrix" data to use as heatmap data. Clustering the data using a correlation coefficient method such as "pearson" is useful for heatmap visualization and requires the transformation of "matrix" data to add a column for clustering information using the "cutree" function and another column to number the rows to be ordered by accending number. Finally the heatmap specifications, which requires the entry of the color palette to use as well as the creation of a length vector that can be inserted in parameter settings to maintain map integrity between datasets of various lengths. Load in the package "gplots" and you're ready to visualize your data once you've set all the specific parameters to your liking.
+
+Good luck!
+CJH
+
+```{r}
+### Create working directory and set it using "setwd" function
+dir = "/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/R FILES"
+setwd(dir)
+```
+
+### STEP 1: Read in Individual Sample File Data one at a time
+
+```{r}
+sample4=read.table ("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/New Expression values (Actual data)/4_trinity.kallisto_abundance.tsv", header=T, sep="\t", dec=".", comment.char = "%")
+sample6=read.table ("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/New Expression values (Actual data)/6_trinity.kallisto_abundance.tsv",header=T, sep="\t", dec=".", comment.char = "%")
+sample7=read.table ("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/New Expression values (Actual data)/7_trinity.kallisto_abundance.tsv", header=T, sep="\t", dec=".", comment.char = "%")
+sample8=read.table ("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/New Expression values (Actual data)/8_trinity.kallisto_abundance.tsv", header=T, sep="\t", dec=".", comment.char = "%")
+sample15=read.table ("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/New Expression values (Actual data)/15_trinity.kallisto_abundance.tsv", header=T, sep="\t", dec=".", comment.char = "%")
+sample17=read.table ("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/New Expression values (Actual data)/17_trinity.kallisto_abundance.tsv", header=T, sep="\t", dec=".", comment.char = "%")
+sample21=read.table ("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/New Expression values (Actual data)/21_trinity.kallisto_abundance.tsv", header=T, sep="\t", dec=".", comment.char = "%")                  
+sample23=read.table ("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/New Expression values (Actual data)/23_trinity.kallisto_abundance.tsv", header=T, sep="\t", dec=".", comment.char = "%")                  
+sample29=read.table ("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/New Expression values (Actual data)/29_trinity.kallisto_abundance.tsv", header=T, sep="\t", dec=".", comment.char = "%")                  
+sample30=read.table ("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/New Expression values (Actual data)/30_trinity.kallisto_abundance.tsv", header=T, sep="\t", dec=".", comment.char = "%")                  
+sample34=read.table ("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/New Expression values (Actual data)/34_trinity.kallisto_abundance.tsv", header=T, sep="\t", dec=".", comment.char = "%")                  
+sample35=read.table ("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/New Expression values (Actual data)/35_trinity.kallisto_abundance.tsv", header=T, sep="\t", dec=".", comment.char = "%")                  
+sample40=read.table ("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/New Expression values (Actual data)/40_trinity.kallisto_abundance.tsv", header=T, sep="\t", dec=".", comment.char = "%")                  
+sample43=read.table ("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/New Expression values (Actual data)/43_trinity.kallisto_abundance.tsv", header=T, sep="\t", dec=".", comment.char = "%")                  
+sample50=read.table ("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/New Expression values (Actual data)/50_trinity.kallisto_abundance.tsv", header=T, sep="\t", dec=".", comment.char = "%")                  
+sample57=read.table ("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/New Expression values (Actual data)/57_trinity.kallisto_abundance.tsv", header=T, sep="\t", dec=".", comment.char = "%")                  
+sample59=read.table ("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/New Expression values (Actual data)/59_trinity.kallisto_abundance.tsv", header=T, sep="\t", dec=".", comment.char = "%")                  
+sample62=read.table ("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/New Expression values (Actual data)/62_trinity.kallisto_abundance.tsv", header=T, sep="\t", dec=".", comment.char = "%")                  
+sample68=read.table ("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/New Expression values (Actual data)/68_trinity.kallisto_abundance.tsv", header=T, sep="\t", dec=".", comment.char = "%")                  
+sample70=read.table ("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/New Expression values (Actual data)/70_trinity.kallisto_abundance.tsv", header=T, sep="\t", dec=".", comment.char = "%")
+
+```
+
+### Step 2: Add an extra column named sample filled with a value named after the sample number 
+
+```{r}
+sample4$sample=4
+sample6$sample=6
+sample7$sample=7  
+sample8$sample=8
+sample15$sample=15
+sample17$sample=17
+sample21$sample=21
+sample23$sample=23
+sample30$sample=30
+sample29$sample=29
+sample34$sample=34
+sample35$sample=35
+sample40$sample=40
+sample43$sample=43
+sample50$sample=50
+sample57$sample=57
+sample59$sample=59
+sample62$sample=62
+sample68$sample=68
+sample70$sample=70
+```
+
+### Step 3: Use "rbind" to combine multiple sample data sets into a single set
+
+```{r}
+fulldatatable = rbind(sample4,sample6,sample7,sample8,sample15,sample17,sample21,
+                    sample23,sample29,sample30,sample34,sample35,sample40,
+                    sample43,sample50,sample57,sample59,sample62,sample68,sample70) 
+
+### Small Example Dataset for quick review
+#NOTfulldatatable = rbind(sample4,sample6,sample7)
+```
+
+### Step 4: Create a new column named "FPKM" & fill it with the FPKM calculated values
+### Add FPKM to Dataset (Various Equivalent Equations for FPKM)
+
+```{r}
+### Multiple ways to do the same thing 
+### Remembering [row , column]
+
+fulldatatable$FPKM = fulldatatable$tpm*1000/fulldatatable$length
+#NOTfulldatatable$FPKM = NOTfulldatatable$tpm*1000/NOTfulldatatable$length
+
+##fulldatatable$FPKM = fulldatatable[,5]*1000 / fulldatatable[,2]
+##fulldatatable$FPKM = fulldatatable[,"tpm"]*1000 / fulldatatable[,"length"]
+##fulldatatable[,"FPKM"] = fulldatatable[,"tpm"]*1000 / fulldatatable[,"length"]
+```
+
+### Step 5: Import Site & Sex Data named as "origindata"
+###         Save EXCEL File to be Imported as txt (save as Tab Delimited)
+### The most important aspect of loading in any EXCEL file to R is to ensure the data in the file is to the liking of R, being that it is in a compact format with no spaces between data.
+
+```{r}
+### Read in Origin Data from EXCEL
+
+origindata = read.table("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/Caging XL data/To export to R 2.txt", header=T, sep="\t", dec=".")
+
+### Use merge function to combine 2 data frames (fulldatatable & origindata) into one by the column(s) with name(s) they share
+### Check for shared column name with "head" function
+
+head(fulldatatable)
+head(origindata)
+
+### merge "fulldatatable" & "origindata" by shared column named "sample"
+fulldatatable = merge(fulldatatable,origindata)
+#NOTfulldatatable = merge(NOTfulldatatable,origindata)
+
+### Confirm merge results
+head(fulldatatable) 
+```
+
+### Step 6: Import Gene Accession ID Info Naming it "Diamond_data"
+#### Aside: "trinity2refid_diamond.txt" was created by matching the Trinity transcript assembly IDs sequences to the best Diamond matches in RefSeq from the NCBI database using Perl software (Biostatistician).
+
+```{r}
+### Import Gene ID info (obtained from biostatistician) naming it "Diamond_data"
+### Use "read.table" or "read.csv" function to read in data table named "trinity2refid_diamond.txt"
+
+Diamond_data = read.table ("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/New Expression values (Actual data)/trinity2refid_diamond.txt", 
+                         header=F, sep="\t", dec=".")
+
+### Add names to the "Diamond_data" columns using the names function
+### df = data frame
+### FORMULA names(df)[names(df) == 'old.var.name'] <- 'new.var.name'
+
+names(Diamond_data)[names(Diamond_data) == "V1"] <- "target_id"
+names(Diamond_data)[names(Diamond_data) == "V2"] <- "gene_ID"
+
+### Merge "fulldatatable" with "Diamond_data" now that a column shares a name ("gene_ID")
+
+fulldatatable = merge(fulldatatable, Diamond_data)
+#NOTfulldatatable = merge(NOTfulldatatable,Diamond_data)
+
+### Save the created fulldatatable as Data Management to reload (read in) as needed later on
+### Use write.csv function with row.names = F to remove the number row R adds
+### Data Management will contain all the sample information. Including a link between the Trinity ID & the Gene Accession ID, & all the origin info (Sample#, length, eff_length, est_counts, tpm, FPKM, Site, Cage, Sex) 
+### Due to the time it takes to create the data frame & size of the file it is best to save it using the "write.csv" function & upload it using "read.csv" function.
+
+### Confirm "merge" result
+head(fulldatatable)
+write.csv(fulldatatable, file = "Data Management", row.names = F)
+
+### Read in Completed table created from above script. 
+### Takes over a minute to load in. 
+#fulldatatable <- read.csv("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/R Course/R-FINAL FILES/Data Management")
+```
+
+### Step 7: Install R package rentrez  
+### Use function "entrez_search" to return a list of objects from the selected database "gene"
+### Use "entrez_search" function "term" argument to select for specific NCBI Gene Accession ID 
+### Match Gene IDs to Protein Match from NCBI online database 
+
+```{r}
+### Example start code
+### Start with a single example to ensure proper results then expand into a for-loop
+### Load in "rentrez" package for needed functions
+library(rentrez) 
+
+### Use "entrez_search" function to create a list from the "gene" database search: db = "gene"
+#### entrez_dbs() database = "gene" term = "NP_891985.1" (NCBI Gene Accession  ID)
+### Use argument "retmax" to determine the maximum number of returned values 
+#### Returning a max value of 1: retmax = 1  
+### Sort by relevance so best match is at the top: sort = "relevance"
+
+# Create a value called "gene_search" which is a list of 5 variables in this instance
+### Term argument used is an NCBI Gene Accession ID
+gene_search <- entrez_search(db="gene", term="NP_891985.1", retmax = 1, sort="relevance")
+
+# Create a value called "geneid" equal to returned list from "gene_search" ids   
+geneid = gene_search$ids 
+
+# Create a list value called "res" to store "entrez_summary" info from the "gene" database specific to the "geneid" value from the "entrez_search" "ids" variable
+res = entrez_summary(db = "gene", id = geneid) 
+
+# Create a value called "description" to store the protein description from "entrez_summary" info
+description = res$description 
+
+# Confirm that Result is a Protein Description
+description
+
+### The end result is a protein description based on the provided NCBI Gene Accession ID from the created data frame stored as a value called "description"
+```
+
+### Code Background for rentrez package
+
+```{r}
+library(rentrez) ### Package Functions Breakdown
+citation("rentrez")
+
+### First use entrez_dbs() to find the list of available databases to search through:
+entrez_dbs()
+
+### Functions with names starting entrez_db_ gather more information about each entrez_dbs() databases:
+
+entrez_db_summary("gene")	### Brief description of what the database is
+entrez_db_searchable("gene") ### Set of search terms that can used with this database
+entrez_db_links("gene")	### Set of databases that might contain linked records
+
+```
+
+### Step 8: Create for Loop to add protein info to gene IDs 
+### (description, scientific name of organism, nomenclature symbol)
+
+```{r}
+library(rentrez)
+
+### Create Empty Data Frame Called "resultDescription" 
+### Fill the (4) named columns with collected gene info from the for-loop
+
+resultDescription = data.frame(gene_ID = as.character(),
+                             description = as.character(),
+                             organism = as.character(),
+                             nomenclaturesymbol = as.character())
+
+### Run for-loop using single example above to expand for all genes in "fulldatatable"
+### Create value "gene_search" to store "entrez_search" data to be extracted
+### Create "geneid" to store "gene_search" ids
+### Create "res" value to store "entrez_summary" info from the "gene" database
+### Create description, organism, nomenclature, and any other information needed as values from the "res" stored data from the entrez_summary(db="gene")
+### Add if statements to place in NAs where "NULL" data is found in the searched database 
+### Finally "rbind" the for loop collected info from the database of interest, stored as values in the named columns of the previously created data frame above called "resultDescription" 
+
+### MARKERS NOTE !?! REPLACE "fulldatatable" with "NOTfulldatatable" to save time for grading
+
+#for(Genes in unique(fulldatatable$gene_ID)){          
+  gene_search <- entrez_search(db="gene", term=Genes, retmax = 1, sort="relevance") # Find ID
+  geneid = gene_search$ids                                                          # Store ID
+  res = entrez_summary(db="gene", id=geneid)      # Store database summary info for extraction
+  description = res$description   # Extract description info from res stored as "description"
+  organism = res$organism$scientificname # Extract scientific name of original seq. organism
+  nomenclature = res$nomenclaturesymbol # Extract nomenclaturesymbol from stored res value
+  if (class(description)=="NULL"){description=NA}   # Adds NAs to Null data
+  if (class(organism)=="NULL"){organism=NA}         # Adds NAs to Null data
+  if (class(nomenclature)=="NULL"){nomenclature=NA} # Adds NAs to Null data
+  resultDescription = rbind (resultDescription, data.frame(gene_ID = Genes,
+                                                        description = description,
+                                                        organism = organism,
+                                                        nomenclaturesymbol = nomenclature))
+}
+
+### Takes a long time (~1hr) to perform with "fulldatatable"- Recommend using NOTfulldatatable
+### Confirm the results of the for loop
+resultDescription 
+
+### Save resultDescription as Protein Names to reload (read in) as needed later on
+### Use write.csv function with row.names = F to remove the number row R adds
+write.csv(resultDescription, file = "Protein Names", row.names = F)
+
+#resultDescription <- read.csv("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/R FILES/Raw Data/Protein Names")
+```
+
+### Step 9: merge "resultDescription" with "fulldatatable" to create "Complete_datatable"
+
+```{r}
+### Use merge function to combine "fulldatatable" & "resultDescription" data frames based on shared gene_ID column into a single massive dataset called "Complete_datatable"
+### Takes some time to merge together
+Complete_datatable <- merge(fulldatatable, resultDescription)
+
+### ADD WARNING FOR ACCIDENTAL FILE NAME OVERRIDE 
+if(sum(dir() == "Complete FHM Dataset") > 0) {print("Watch out, DUMMY!!! File already exists")}
+
+### Save Complete_datatable as Complete FHM Dataset to reload (read in) as needed later on
+### Use write.csv function with row.names = F to remove the number row R adds
+write.csv(Complete_datatable, file = "Complete FHM Dataset", row.names = F)
+
+if(sum(dir() == "Complete FHM Dataset") > 0) {print("Watch out, DUMMY!!! File already exists")}
+
+```
+
+### Step 10: PCA Visualization
+### Use Sleuth Determined Differentially Expressed Genes (DEG)
+
+```{r}
+### Read in Sleuth data set to select for small specific DEG IDs
+Sleuth_Full <- read.csv(("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/R FILES/Sleuth Analysis/Sleuth Complete-CSV Files/Chris-First-Full-Sleuth.csv"), 
+                        header=T, dec=".", sep=",")
+
+### Read in "Complete FHM Dataset" to extract info from for PCA (Takes >1min to load in)
+#Complete_datatable <- read.csv("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/R Course/R-FINAL FILES/Complete FHM Dataset")
+
+### Need a wide data frame with genes as columns & samples as rows
+### Template to reshape Fulldata
+
+### Arranges "Complete_datatable" in ascending order by "target_id" then "sample" number
+### Must use target_id instead of gene_ID because multiple "target_id" match a single "gene_ID" which otherwise complicates the script further down
+Complete_datatable = Complete_datatable[order(Complete_datatable$target_id,
+                                              Complete_datatable$sample),]
+
+library(reshape2)
+citation("reshape2")
+
+### Create "Selectgenes" value to store all the "target_id" info from "Sleuth_Full" dataset
+Selectgenes <- Sleuth_Full$target_id
+
+### Create new dataset from "Complete_datatable" called "Tinydata" 
+### Need a small dataset to specify selection from Big dataset ("Complete_datatable")
+### "Tinydata" only contains the "Selectgenes" "target_id" values and the (4) named columns below
+### Subset "Complete_datatable" into a new vector calling it "Tinydata"
+Tinydata <- Complete_datatable[which(Complete_datatable$target_id %in% Selectgenes), 
+                               c("Site", "target_id", "sample", "FPKM")]
+
+### "dcast" function (part of reshape2 package) rearranges "Tinydata" 
+### Keeping "Site" & "sample" as rows and making "target_id" into columns filled with "FPKM" values
+PCAarray = dcast(Tinydata, Site*sample ~ target_id, value.var = "FPKM")
+
+### Makes the row names equal to sample number
+row.names(PCAarray) = PCAarray$sample
+
+### Removes the second column (sample # column)> Redundant
+PCAarray = PCAarray[,-2]
+
+### Load FactoMineR package to run PCA
+library(FactoMineR)
+citation("FactoMineR")
+
+### Run PCA on "PCAarray" Vector, stored as "res" vector
+res = PCA(PCAarray, quali.sup = 1)
+
+### BE PATIENT!!! Wait until STOP sign disappears for 3 seconds (May Crash R)
+### Should result in two maps: 1) Individuals factor map (GOOD) 2) Variables factor map (BAD)
+
+```
+
+### Step 11:  Heatmap Visualization
+### Use Sleuth Determined Differentially Expressed Genes (DEG) 
+
+```{r}
+### Create & Set Working Directory
+dir = "/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/R FILES"
+setwd(dir)
+
+######### READ IN DATA #######################################################################
+### Read in "Fulldata" that contains the differential expression data (FPKM/TPM) with gene IDs
+Fulldata = read.table(paste(dir, "/Raw Data/Data Management", sep=""), header=T, dec=".", sep=",")
+
+### Read in "Protein_names" for protein description information
+Protein_names = read.table(paste(dir, "/Raw Data/Protein Names", sep=""), header=T, dec=".", sep=",")
+
+### Read in Dataset "Chris-First-Full-Sleuth.csv" with Selected Genes to heatmap
+Full_Sleuth = read.csv(("/Users/christopherjameshooey/Desktop/LAB INFO/Masters/MASTERS DATA/R FILES/Sleuth Analysis/Sleuth Complete (GENE & PROTEIN)-CSV Files/Chris-First-Full-Sleuth.csv"), header=T, dec=".", sep=",")
+
+######### TRANSFORM DATA ##############################################################
+### Create "selectedgenes" value composed from "Full_Sleuth" "target_id" column values
+selectedgenes = Full_Sleuth$target_id
+
+### Create "matrix" value composed of the target_id values from "Fulldata" that match "selectedgenes"  
+matrix = Fulldata[which(Fulldata$target_id %in% selectedgenes),]
+
+### Add a Log transformation of FPKM values column to "matrix" named "logFPKM"
+matrix$logFPKM = log(matrix$FPKM + 1)
+
+### Transpose "matrix"
+library(reshape2)
+
+### Create a new column named "sampleID" that combines "Site" & "sample"
+matrix$sampleID = paste(matrix$Site, matrix$sample, sep="_")
+
+### Reshape "matrix" to include all rows but only the 4 named columns: "sampleID", "target_id", "gene_ID", "logFPKM"
+matrix = matrix[, c("sampleID", "target_id", "gene_ID", "logFPKM")]
+
+### Use function "dcast" to reshape "matrix" to have "target_id" & gene_ID as row names, "sampleID" as columns filled with "logFPKM" data values 
+matrix = dcast(matrix, target_id+gene_ID ~ sampleID, value.var="logFPKM")
+
+### Use merge function to combine "matrix" & "Protein_names" by shared column "gene_ID" to gain protein functional information
+matrix = merge(matrix, Protein_names[, c("gene_ID", "description")])
+
+######### Simplify & Normalize "temp" to use as heatmap data ##################################
+library(matrixStats)
+citation("matrixStats")
+
+### Create "temp" vector that removes the named columns 
+temp = matrix[,-which(names(matrix) %in% c("target_id", "gene_ID", "sampleID", "description"))]
+
+### Convert "temp" to a matrix from data frame because of downstream restrictions
+temp = as.matrix(temp)
+
+### Perform Normalization Calculation on "temp" data 
+### (For one gene need min to max value -> zero-mean & unit-variance normalization)
+temp = (temp-rowMeans(temp))/rowSds(temp)
+
+######### Cluster info for heatmap ###########################################
+### To cluster similar expression in "temp" data
+### Creates a distance measure based on 1 minus the correlation of the transposed "temp" vector columns using the "pearson" correlation coefficient method
+hr = hclust(as.dist(1-cor(t(temp), method = "pearson")), method = "complete")
+
+### Create vector "nclass" to specify class number in case of change needed later
+nclass = 2
+
+### Adds the column mycl to "matrix" 
+### Using the "cutree" function "matrix" is cut by the specified number of classes (2) according to the "pearson" correlation coefficient relatedness
+matrix$mycl = cutree(hr, k=nclass)
+
+### Creates a new column in "matrix" named "rownum" to number the height/length of the rows
+matrix$rownum = 1:nrow(matrix)
+
+### Creates Value named "rowcol" based on the clustering above to visualize "mycl" as red & orange
+rowcol = data.frame(mycl = c(1:2), rowcol = c("orange", "red"))
+
+### Use the "merge" function to combine "matrix" & "rowcol" to add cluster data
+matrix = merge(matrix, rowcol, sort = F)
+
+### Rearranges "matrix" in accending order according to the "rownum" column data for all columns
+matrix = matrix[order(matrix$rownum),]
+
+######### Heatmap Specifications ##################################################
+
+### Names the 3 colors to use on the heatmap to denote relative change (low to high)
+colfunc = colorRampPalette(c("blue", "black", "yellow"))
+
+### Gives each sample (20) number a specified color by site (5) group
+colside = c("green", "green", "green", "green",
+          "yellow", "yellow", "yellow", "yellow",
+          "red", "red", "red", "red",
+          "black", "black", "black", "black",
+          "pink", "pink", "pink", "pink")
+
+### Creates a vector "l" that is the length of the vector "temp" to make for easier heatmap adjustments
+l = length(temp[,1])
+
+library(gplots) 
+citation("gplots")
+
+### Generates a heatmap plot from "temp" data matrix to be stored as "heatmap-CHRIS HOOEY.tiff" in the set directory
+### Numbers are to set dimension parameters are the result of trial & error & personal preference
+plot.new()
+tiff(paste(dir,"/heatmap-CHRIS HOOEY.tiff", sep=""), # Saves created heatmap to set directory
+     width = 25, height = 7+2+l/2.6, units = "cm", res = 600, compression = "zip")
+par(mar=c(7,4,4,2)+0.1) # Set graphical parameters
+out = heatmap.2(temp
+              ,col = colfunc(200)
+              ,Rowv = T
+              ,Colv = F
+              ,dendrogram = c("row") # Creates dendrogram connecting row data
+              ,margins = c(0.3,13) # Determines margin sizes in cm units
+              ,trace = "none"
+              ,scale = "none"
+              ,labRow = matrix$description # Creates row labels based on protein description
+              ,labCol = ""
+              ,density.info =c ("none")
+              # RowsideColors, 1=Rowside colors, 2=heatmap, 3=rowdendo, 4=coldendo, 5=key
+              ,lmat = rbind(c(0,0,5,0), c(4,1,3,0), c(0,0,2,0), c(0,0,6,0))   # RowsideColors & ColSideColors, 1=Rowside colors, 2=ColSideColors, 3=heatmap, 4=rowdendo, 5=coldendo, 6=key
+              ,lwid = c(0.4,0.12,2.5,3) # Length of width
+              ,lhei = c(0.1,l/4,l/120,0.05) # Length of height
+              ,RowSideColors = as.character(matrix$rowcol) # Makes row colours red or orange
+              ,ColSideColors = colside # Makes column colors equal to "colside" vector above
+              ,key = F
+              ,srtCol = 45
+              ,cexRow = 1.45
+)
+dev.off()
+
+RStudio.Version()
+sessionInfo()
+
+```
+
+References:
+
+Bengtsson, H. (2016). matrixStats: Functions that Apply to Rows and Columns of Matrices (and to Vectors). R package version 0.51.0.https://CRAN.R-project.org/package=matrixStats
+
+Lê, S., Josse, J. & Husson, F. (2008). FactoMineR: An R Package for Multivariate Analysis. Journal of Statistical Software. 25(1). pp. 1-18.
+
+RStudio Team (2015). RStudio: Integrated Development for R. RStudio, Inc., Boston, MA URL http://www.rstudio.com/.
+
+Warnes, G.R., Bolker, B., Bonebakker, L., Gentleman, R., Liaw, W.H.A., Lumley, T., Maechler, M., Magnusson, A., Moeller, S., Schwartz, M., & Venables, B. (2016). gplots: Various R Programming Tools for Plotting Data. R package version 3.0.1. https://CRAN.R-project.org/package=gplots
+
+Wickham, H. (2007). Reshaping Data with the reshape Package. Journal of Statistical Software, 21(12), 1-20. URL http://www.jstatsoft.org/v21/i12/.
+
+Winter, D. (2016). rentrez: Entrez in R. R package version 1.0.2. https://github.com/ropensci/rentrez
+
+
+
+
+
+
+
+
+

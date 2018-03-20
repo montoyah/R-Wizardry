@@ -1,0 +1,705 @@
+---
+title: "R Tutorial - R Wizardry, Winter 2017"
+author: "Ally Gibson"
+date: "April 9, 2017"
+output:
+  html_document: default
+ 
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+##### BACKGROUND #####
+
+1. Background on mixed models, GEEs, and GLMMs
+
+  As a graduate student just started out with data analysis, it's easy to get overwhelmed in choosing appropriate statistical analyses for your data. Just the process of manipulating and massaging your data into the perfect shape for analysis can be daunting. This goal of this tutorial is to help guide both graduate and undergraduate students new to mixed modeling through the process - from data management to interpretation of statistical models. Note that in reference to statistical analyses, this tutorial is by NO means an expert guide, and does attempt to point readers in the direction of far more well-informed resources. 
+  
+  Generalized Estimating Equations (GEE) attempt to predict a model that best "fits" or describes the structure of variance in a sample, based on the assumptions that data is correlated into clusters of repeated measures (Zeger and Liang, 1986). This is commonly the case with longitudinal studies in which, for example, values might be recorded for patient A at 20 different points in a long study. These 20 data points cannot be considered independent - they are linked because the value of the second data point is related, at least to some extent, on the value of the first data point. For instance, in a weight loss study, weight at time B is not likely to be 80 lbs if weight at time A was 380 lbs. All of these data points from one, repeated individual are considered in clusters. This is the first piece of what GEEs try to accomplish. These repeated measures can be more than just individuals - for instance, groups, provinces, study sites, transects could all be considered repeated measures. Note that data does not have to be longitudinal to be correlated. 
+  
+  Data sets which benefit from the use of GEEs to explain variance in their data are often good candidates for Generalized Linear Mixed Models (GLMMs) as well. How do these two tests differ? One key theoretical difference involves how they estimate means within the model. GEEs estimate variation using a population-averaged model, whereas GLMMs estimate variation using a conditional, subject-specific model (Ghisletta and Spini, 2004). Thus the difference lies in how they treat clusters of data. 
+  
+  On a more practical level for those attempting to analyze behavioral data, a few notes. First, GEEs do not assume distribution, so within-group correlation can be set manually when running the test using correlation structures. Additionally, GEEs are more advised for repeated dyads, specifically. Lastly, as is mentioned later in the tutorial, GLMMs have the added advantage of requiring less robust data. 
+
+2. Background on the data set
+
+  In the study of primatology, infant development has been a key topic of interest since the 1970s. The term “infant handling” is broadly used to characterize interactions with group members. Specifically, infant handling refers to any touch-based interaction between an infant and another individual (and also not an infant). In my project, I am interested in assessing variation in the amount of handling interactions received by infants from both mothers and non-mothers, and analyzing how intrinsic factors, such as infant sex, maternal parity, and group type drive individual variation. 
+  
+  The data set for my project comes from five months of field research collecting behavioral observations on a population of endangered ursine colobus (Colobus vellerosus) monkeys at the Boabeng-Feima Monkey Sanctuary in central Ghana. The study included 16 infants from four distinct groups. Infants ranged in age from 0 to 78 weeks of age. The study incorporates longitudinal data. 
+  
+  The independent variables used in this data set include three categorical variables: infant sex (2 levels: "M", "F"), maternal parity (whether or not mothers have had offspring before; 2 levels: "primarparous", "multiparous"), and group type (categorized based on the number of adult males present within the groups; 2 levels: "unimale", "multimale"). The dependent variables used in this data set are individual sums of the total amount of maternal/non-maternal handling time observed, presented as a proportion of total observed handling time divided by the amount of total observation time. In other words, the dependent variable is a non-integer numerical value.  
+
+  Due to the long, drawn-out lifespans of primates, sample sizes within the primatological field are routinely small. Thus, while this tutorial is specific to my own personal research, it also directly applicable to any other behavioral data set in which there is a small sample size drawn from repeated individuals, repeated individual dyads, or repeated group clusters in a longitudinal study. 
+
+
+
+##### GETTING STARTED #####
+
+```{r}
+#Clean the workspace:
+rm(list=ls(all=T))
+
+getwd()
+
+#Load the files:
+handling_total <- read.csv("/Users/owner2/Desktop/Handling_abridged.csv")
+s_sample <- read.csv("/Users/owner2/Documents/sampling log.csv")
+
+#Familiarizing ourselves with the data
+str(handling_total)
+head(handling_total)
+
+#install packages (skip this step if packages already downloaded)
+#install.packages("plyr")
+#install.packages("dplyr")
+#install.packages("geepack")
+#install.packages("doBy")
+#install.packages("lme4")
+
+#Load packages 
+library("plyr")
+library("dplyr")
+library("geepack")
+library("doBy")
+library("lme4")
+library("knitr")
+library("markdown")
+```
+
+
+
+##### MERGING THE DATA #####
+
+  For this data set we will eventually need to control for differences in the amount of observed time per subject (for each subject's unique age in weeks). This sampling information was left out of the "handling_total" data frame (tisk, tisk). In order to combine all our data into one neat and tidy place, we are going to use the "merge()" function, which joins dataframes by matching data sets by the columns that they already share and adding unshared columns into the new dataframe. 
+  
+  Note that in the example below, we did not need to specify the columns we wanted to use to match our functions. R has automatically picked which unique columns are shared and matched the data frames accordingly. However, in order to be extra sure, you can add the argument "by" to manually specify which columns to use as matching parameters. Also note that when data frames hold the same information in 'matching columns' but do not share the same column names, the "by" argument gets replaced with "by.x" (i.e., what this column is named in the first dataframe) and "by.y" (i.e., what the column is named in the second dataframe). 
+
+```{r}
+
+handling_total <- merge(handling_total, s_sample)
+
+```
+
+
+
+##### TIDYING THE DATA, PART ONE #####
+
+  For each behavior, the data set presently has two lines of data (first line = behavior start, second line = behavior stop). Only the first line of data for each behavior holds the value of the behavior's duration (in the "duration_adj_s" column); the second line has a "NA" in the "duration_adj_s" column. Because only the first line of data for each behavior is useful to us, we need to eliminate all 'behavior stop' lines. The column "event_type" allows us to differentiate between behavior starts and stops, as data in this column either reads "State start" or "State stop." In order to clean up our data, we are going to start by removing every row of data for which the "event_type" column holds a "State stop" value (i.e., we're telling R "choose only non-State stop values"). We will do this by subseting the data and overwriting the data frame "handling_total".
+  
+```{r}
+
+handling_total <- subset(handling_total, handling_total$event_type != "State stop")
+
+```
+
+  Next, we are only interested in the total duration of handling received in the biologically meaningful sense - if two handling behaviors overlapped and occured at the same time, the total sum of handling received may be one value, and the total time of handling received may be another. In other words, we are only interested in the total amount of actual time the infant was handled, and therefore this total excludes handling behaviors which coincided with another handling behavior. The column "overlap_id" indicates which specific behaviors overlapped (in case we were to actually need that information later) while the column "overlap_drop" indicates which behaviors can be dropped (denoted with the value "Y") because they coincided with another behavior. Once again, we will subset the data and overwrite the data frame "handling_total".
+
+```{r}
+
+handling_total <- subset(handling_total, #data frame
+                         handling_total$drop_overlap != "Y") #logical statement for drop
+
+```
+
+  Next, the data we actually need for GEE analysis is really just the dependent ("duration_adj_s") and independent variables ("sex", "maternal_parity", "group_type"), plus columns that indicate the id of the individual ("ind_id") and the age of the infant, in weeks, at the time of handling ("age_weeks_trunc") which will later be included as a random effect in the model. We will also include "sampling_s" so that we can later control for differences in total observation time. All other columns are just added noise, so for the purposes of this analysis we can remove them from our data frame. Instead of overwriting our data frame though, let's rename it so that we know it's the data frame that ONLY has what we need for a GEE test. We will subset our data to include all rows, but just the columns that we need (mentioned above).
+
+```{r}
+
+handling_total_gee <- handling_total[ , c("ind_id", 
+                                          "sex", 
+                                          "age_weeks_trunc", 
+                                          "maternal_parity",   
+                                          "duration_adj_s",  
+                                          "group_type", 
+                                          "behavior_type", 
+                                          "sampling_s")]
+```
+
+
+
+##### ALTERNATIVE VERSION OF TIDYING THE DATA, PART ONE #####
+
+  Alternatively, we could have done all of the above ("Tidying the data, part one") in one line of code (which appears below). In the event that you attempt to subset data in a fashion similar to that displayed below, note that because we are doing all of the subsetting at the same time, any NA values appearing in rows and columns may contribute to the creation of empty "NA" lines which will not only make your data frame cluttered, but will also impede the use of certain functions later on. 
+  
+    In order to work around this issue, the "which()" function can be employed. "Which()" is a logical operator that evaluates whether observations are TRUE or FALSE based on the conditions that are passed. By doing this, we avoid the building of dummy lines because our data frame will have exactly as many observations as there are observations for which TRUE is met. In otherwords, the line of code below selects only the rows for which it is TRUE that they have the value "State start" in the column "event_type" AND they have the value "N" in the column "drop_overlap". Next, the code selects only the columns listed. 
+
+```{r}
+
+handling_total_gee <- handling_total[which(handling_total$event_type == "State start" &
+                                       handling_total$drop_overlap == "N"), 
+                                      c("ind_id",
+                                        "sex",
+                                        "age_weeks_trunc",
+                                        "maternal_parity",
+                                        "group_type",
+                                        "duration_adj_s",
+                                        "behavior_type",
+                                        "sampling_s")]
+
+```
+
+
+
+##### TIDYING THE DATA, PART TWO #####
+
+  For this analysis, we're not interested in variation in total handling received from all sources combined. We're only interested in the variation in total maternal handling received and total nonmaternal handling received. Thus, we need to separate our data into two sets, "handling_mat_gee" and "handling_nonmat_gee". We're going to accomplish this by subsetting rows by values in a specific column ("behavior_type") once more, in two lines of code. 
+  
+```{r}
+
+#maternal handling only
+handling_mat_gee <- handling_total_gee[handling_total_gee$behavior_type == "mat_han", ] 
+
+#nonmaternal handling only
+handling_nonmat_gee <- handling_total_gee[handling_total_gee$behavior_type == "nonmat_han", ] 
+
+```
+
+  Next, our data is currently in the form of all handling behaviors observed for all individuals. However, we're not interested in evaluating the variation in durations of individual handling events. Instead we're interested in knowing about variation in the total summed amount of handling received. In other words, this is the difference between finding that the average handling event lasts n seconds and the average amount of handling an infant receives during one week is x seconds. Again, we're interested in the latter. 
+  
+  We can accomplish this by summing durations of handling events, and organizing this by individual infants using the aggregate() function. Once again, we want our new dataframe to include only the variables we will later use of our GEE analysis. The "aggregate()" function will sum the "duration_adj_s" data by infant and age category (because these are unique values). Yet, each unique infant always has the same information for sex, maternal parity, and group type so there will not be sums for each of these categories. This works perfectly because later in our analysis we will want to know individual variation, but we will also want to control for age. 
+  
+  Normally, you manually enter exactly which column you want the function to "aggregate()" the data with using the "by=" argument alone. However, in the example below, we have also used the "list()" function. Any columns not specified when using the "aggregate()" function are automatically dropped. Therefore, in using the list() function we are accomplishing a few goals all at the same time. Goals accomplished:
+       #1: We tell R to include these coloumns in the output. 
+       #2: "aggregate()" renames columns and gives them generic variables as names, so we are telling R how we actually want these new columns named. 
+       #3: we are telling R how to group our variables, R then automatically generates aggregations based on columns holding unique values. 
+ 
+  Again, since all observations of unique individuals have the same value for the "type columns" it appears 'AS IF' aggregate has not grouped by type when, in fact, it has but only needs to create one listing per individual because group type is always the same. Lastly, one shortcut way to manually specify grouping patterns would be to use the "~" rather than the "by=" argument.
+
+  ***Note that the "aggregate()" function is very useful for a wide variety of summary statistics. The example below utilizes the function to compute sums. However, "aggreggate()" can also be used to compute means, averages of specific columns (e.g., FUN = avg(age_weeks_trunc)), minimums, maximums, medians, etc. 
+
+```{r}
+
+handling_mat_gee <- aggregate(handling_mat_gee$duration_adj_s, #data to  be summarized
+                         by = list(id = handling_mat_gee$ind_id, #says how to group data
+                              weeks = handling_mat_gee$age_weeks_trunc, 
+                              sex = handling_mat_gee$sex, 
+                              type = handling_mat_gee$group_type, 
+                              par = handling_mat_gee$maternal_parity,
+                              samp = handling_mat_gee$sampling_s),
+                         FUN = sum, na.rm=T) #specifies the function used to group data
+
+handling_nonmat_gee <- aggregate(handling_nonmat_gee$duration_adj_s, 
+                         list(id = handling_nonmat_gee$ind_id, 
+                              weeks = handling_nonmat_gee$age_weeks_trunc,
+                              sex = handling_nonmat_gee$sex, 
+                              type = handling_nonmat_gee$group_type, 
+                              par = handling_nonmat_gee$maternal_parity, 
+                              samp = handling_nonmat_gee$sampling_s),
+                         FUN = sum, na.rm=T)
+
+#To visualize our new dataframes:
+head(handling_mat_gee)
+head(handling_nonmat_gee)
+
+```
+
+  Later on to run analysis properly we will need to have our data organized alphabetically and chronologically. In order to accomplish this, we can use the "arrange()" function from the "dplyr" package. Please note that in order to avoid errors and stress-induced, premature hair loss, when "dplyr" and "plyr" packages are used in the same session, you MUST load "plyr" before "dplyr" (as we have done at the very beginning of this session). 
+    
+    Because we want the first "sorter" to be the "id" column, we list it first. Coincidentally, because we want the dataframe sorted next by the "weeks" column we list it second. If we had a larger dataset we could continue listing an exact order for data to be sorted in by continuing to list several columns. However, we're not really interested in any additional sorting, so it's not worth bothering with. "arrange()" can also sort back-to-front (aka 'descending' order) simply by using the function "desc()" before listing a column (e.g., arrange(handling_mat_gee, desc(id))). Also, please note that unless you save the output as a dataframe, the new arrangment will not be saved. 
+
+```{r}
+#maternal handling data
+handling_mat_gee <- arrange(handling_mat_gee, #data
+                            id, #first sorting scheme
+                            weeks) #second sorting scheme
+
+#nonmaternal handling data
+handling_nonmat_gee <- arrange(handling_nonmat_gee, 
+                               id, 
+                               weeks) 
+
+```
+
+
+
+##### PREPPING THE DATA #####
+
+  Because different individuals were sampled at different rates, the amount of handling observed may be biased to represent more information about rates of observation than actually describing variation in handling. One way to solve this issue during the actual modeling and analysis stage would be to call the "offset=" argument (which will be discussed again later). However, not all modeling packages include this possibility, so, for our purposes, we will wash out the effects of sampling rate by analyzing durations as a proportion of total sampling time. In order to do this, we can manually create a new column "sample_time" to each data frame which will be filled with this proportion. To accomplish this, we tell R that for each observation we want to divide the value in column "x" by the value in column "samp". Then we want R to take this data and use it to populate the new column, "prop". 
+  
+```{r}
+
+#The new column in the "mat_gee_sum" and "nonmat_gee_sum" data frames represents a proportion (handling seconds per observed seconds).
+handling_mat_gee$prop <- handling_mat_gee[ ,"x"]/handling_mat_gee[ ,"samp"]
+handling_nonmat_gee$prop <- handling_nonmat_gee[ ,"x"]/handling_nonmat_gee[ ,"samp"]
+
+```
+
+
+
+##### EXAMINING DATA DISTRIBUTION: HISTOGRAMS #####
+
+  Before we run the actual GEE analysis, it is important to know what the distribution of the data is, as we will need to be able to set an argument in our GEE function ("geeglm") for the type of distribution. We will use two methods to help visualize the data - first a histogram, then a Q-Q plot. 
+
+  Basic, non-publication quality histograms can easily be created using the function "hist()". Just passing the data through the function is enough to create a histogram. However, it can be helpful for better understanding of the data breakdown to manually specify limits and breaks within the function. To do this, you need to pass a range for x and y limits using the arguments "xlim" and "ylim" respectively, and concatenating limits using "c()". The "break" argument allows us to specify how many "chunks" we want the data to be distributed in. The more chunks, the more detail we can see regarding the distribution of our data. Furthermore, in order for others, such as supervisors, to take a look at the data, the plot can be made more accessible by manually naming the x axis label using the "xlab" argument and creating a main title for the plot using the "main" argument. Lastly, a change in color may help individuals with weaker eyes see the data. We can change bar color using the "col" argument. Note that "col" accepts color names (i.e., "blue") as well as numbers (i.e., "1"). 
+  
+  ***Because we will run our two data sets with slightly different types of multivariate analysis, we will view the "prop" data for the maternal handling data set, and the "x" data for the nonmaternal handling data set. 
+
+```{r}
+
+hist(handling_mat_gee$prop, #data set
+     breaks = 16, #specifies how many chunks data should be divided into
+     xlim = c(0, 1), #specify x limits
+     ylim = c(0, 30), #specify y limits
+     col = "grey", #choose a color
+     xlab = "maternal handling duration", #label x axis
+     main = "Histogram of maternal handling durations") #specify plot title
+
+hist(handling_nonmat_gee$x, 
+     breaks = 16, 
+     xlim = c(0, 1200), 
+     ylim = c(0, 80), 
+     col = "grey", 
+     xlab = "nonmaternal handling duration", 
+     main = "Histogram of nonmaternal handling durations")
+
+```
+  Having run these visualizations, it's evident that there is an outlying data point in the nonmaternal handling dataset ("handling_nonmat_gee"). We need to find which data point that is, and then remove it from the data set before we can run analysis. A step-by-step instruction follows. 
+
+  First, we're going to look in the data set for one value that is far higher than all others. One option would be to visually inspect the actual data frame. Or, we can use the max() function to tell us what the highest value is. This function takes the dataset (in this case the "x" column in "handling_nonmat_gee") and also an argument for what to do with NA values. This dataframe doesn't include NAs, so for this example we will ignore it. However, if the data set were to include NAs, we would remove them using a "na.rm = TRUE" argument. 
+
+```{r}
+
+#Using the max function alone simply returns the highest value
+max(handling_nonmat_gee$x)
+
+#Alternatively, using the which() function returns the exact observation in the dataframe
+which(handling_nonmat_gee$x == max(handling_nonmat_gee$x))
+
+```
+
+  The second step is to filter out the outlier using the "filter()" function, which is part of the "dplyr" package. The "filter()" function selects the specific observations that have been called, based on the parameters that are passed through the function. In this case, we can set any parameter that will get rid of this value (for example, values that are above 700, since none of the other duration values in this dataframe are greater than that arbitrary number). However, since we know the exact value of the outlier, we can also choose to filter by only selecting observations for which the duration value is less than the maximum of the dataset, 1056. The "filter()" function requires the specification of the data frame and then requires for the column to be specified seperately (i.e., specifying the exact column for the dataset will not be accepted; you cannot pass dataframe$column for the data argument). Next, the "filter()" function requires you to input the values that will be searched (in this example, the "x" column) and what the filter parameters you want (in other words, which values you want to be selected). Essentially, we are creating a subset for our data which has the outlier removed. Because we don't want to pass the wrong dataframe for our gee test later, we are going to overwrite the existing "handling_nonmat_gee" data frame. 
+
+```{r}
+
+#overwrites handling_nonmat_gee with a new dataframe that has no outliers
+handling_nonmat_gee <- filter(handling_nonmat_gee, x < 1055) 
+
+```
+
+  Let's take another look at our the distribution for the duration data within our new handling_mat_gee dataframe. Because we've changed the data set slightly, we're also going to change the xlim slightly. 
+
+```{r}
+
+hist(handling_nonmat_gee$x, 
+     breaks = 16, 
+     xlim = c(0, 600), 
+     ylim = c(0, 80), 
+     col = "grey", 
+     xlab = "nonmaternal handling duration", 
+     main = "Histogram of nonmaternal handling durations")
+
+```
+
+
+
+##### EXAMINING DATA DISTRIBUTION: Q-Q PLOT #####
+
+  Another way we can visualize the data to see if it is distributed normally is making a Q-Q plot. To do this, we will need the "qqnorm()" and "qqline()" functions. Essentially, the first function will evaluate the fit of data to a normal distribution by plotting expected quantiles for normally distributed data to the sample's quantiles. The second function, "qqline()", simply plots a line that passes through the first and third quantiles of the data and helps visualize what normally distributed data should look like (without residuals). If the data is distributed normally, we would expect for the "qqnorm()" function to result in data points being plotted in a straight line. 
+  
+  Essentially the qqnorm plots the data with residuals, while the qqline does not. If residuals roughly match up to what would be expected for normally distributed data, we can infer that our data is, in fact, normally distributed.
+  
+  ***Just as above, because we are going to analyze the two data sets slightly differently, we're going to look at the distribution of slightly different coloumns of data.
+
+```{r}
+
+#Examining distribution of the maternal handling data set
+qqnorm(handling_mat_gee$prop) #plot the data with residuals
+qqline(handling_mat_gee$prop) #plot the data without residuals
+
+#Examining distribution of the nonmaternal handling data set 
+qqnorm(handling_nonmat_gee$x)
+qqline(handling_nonmat_gee$x)
+
+```
+ 
+  What we've learned from running Q-Q plots is that, just for the nonmaternal data set, the normal distribution fits the model for our 'midrange' duration values, but that for the first and fourth quartiles, the model doesn't really fit at all. One way we can downplay the residuals is to transform the data. (Explanation follows.) The maternal data set is already normally distributed and does not need transformed. We can infer this from the fact that the qqnorm points almost perfectly line up with the qqline we've plotted. 
+
+
+
+##### TRANSFORMING THE DATA #####
+
+  In order to use a log transformation, we need to make sure that our dataset does not contain any zero values. This is important, because the log(0)=undefined. This will create headaches later on if the 0s are left as is in the data set. Unfortunately, our data does contain one 0. :( Luckily, there's a work-around for this problem! :) The method we're going to use today is adding a small value to ALL observations in the "x" column. 
+
+```{r}
+
+#adding our small value, values populate a new column "trans_x"
+handling_nonmat_gee$trans_x <- handling_nonmat_gee[ ,"x"] + 0.1 
+
+#replace the new column with a column that holds the log transformation of our data
+handling_nonmat_gee$log_x <- log(handling_nonmat_gee$trans_x)
+
+```
+  Now that we've completed the transformation, we're going to check the data with a Q-Q plot to see if our data now fits the expected normal distribution model. 
+
+```{r}
+
+qqnorm(handling_nonmat_gee$log_x)
+qqline(handling_nonmat_gee$log_x)
+
+```
+ 
+  Our resuls indicate that this method was successful (the plotted points from qqnorm match up relatively well to the qqline).
+
+
+
+##### DATA ANALYSIS: GEE TEST, PART ONE ("Putting together the model") #####
+
+  As a reminder, the question we are attempting to answer is: how does the amount of handling received by infants vary within this population with respect to infant sex, maternal parity, and group type (when age is included as a random effect)?
+  
+  But before we begin with that step - PLOT TWIST! - we need to revisit the assumptions of GEE test to double check that it works for both datasets (hint: it doesn't, and you may have inferred this based on the foreshadowing earlier in the tutorial).
+  
+  GEE tests have a few main assumptions. First, the dependent variable needs to be normally distributed. If it's not, we need to specify the distribution. We're still good there. Second, both the number and the size of clusters needs to be higher than 10 as a general rule (Ghisletta and Spini, 2004). Our data is clustered by individual, and every week of that individual gives us a count of 1. Essentially we need to have more than 10 clusters, which we do have, but our clusters themselves must have at least ten observations (in this case, weeks). Here lies our problem. While our maternal data set doesn't have much issue meeting this assumption, our nonmaternal data set is not going to work for this test. The solution? We could break our data up into different temporal categories (i.e., days instead of weeks) or, we could use a different linear model. New linear model it is! Thus, for the GEE test, we're only going to proceed with the maternal data set. Later, we will go over using a GLMM test on our nonmaternal data. 
+  
+  In order to proceed with the GEE test we will need a way of specifying the order in which the samples were collected, to be used for the argument "waves". Essentially, we want R to come up with a sequential order for our observations based on shared variables. In other words, for all observations that have the same value in the "id" and "weeks" columns, we want R to give them numbers (e.g., 1, 2, 3, ...). 
+  
+  There are a few different ways of doing this - i.e., using the function "data.table()" and specifying an order to your data, or using the "mutate()" function from "dplyr" package. The name data.table is a bit of a misnomer, because it does keep data as a data frame. Using "data.table()" requires familiarity with some of the quirkier symbols of the R language, such as ":=", thus making it less accessible to new users of R. Please note, however, that both the "data.table()" and "mutate()" functions work similarly to the example below, and utilize the pairing of the "seq_along()" function. In total, I found the following version to be the most accessible and easy to follow. 
+  
+  The "ddply()" function works by splitting data frames, applying a function, and then putting the results back together in the form of a new data frame. The ".variables" argument specifies which variabes to use when splitting the data frame up. The ".fun" argument specifies the function that will applied to all of the new chunks of data. Lastly, we name what we want our data to look like when it gets put back to together. In this example, we want the newly generated data to be placed in a new column, "wave". We want the new data to be a counted sequence generated based on the chronological order of weeks within each chunk (remember, our individuals are our chunks). 
+
+```{r}
+
+handling_mat_gee <- ddply(handling_mat_gee, #specify data set
+                          .variables = "id", #specify how we'll split the data
+                          .fun = transform, #specify the function to be applied
+                          wave = seq_along(weeks)) #where new data goes, how generated
+
+```
+***Note: Using waves is not required for all GEE tests. If your data set does not use an ar1 correlation structure, then you may be able to skip this last step entirely. Furthermore, because order of observations matters for the ar1 correlation structures (but not others), when not using the ar1 structure, you can skip the step above in which we used the "arrage()" function to reorder observations. 
+
+  There are a few different R packages which can be used to run GEE analyses - namely "gee" and "geepack". Most R users seem to use "geepack" because it is slightly more powerful. For instance, "geepack" allows users to run an anova that compares different models by using Wald tests. The package "gee" does not have this capability. Furthermore, for users who may be familiar with generalized linear models using the function "glm()" the main function for "geepack" - "geeglm" - will be very simple to adopt because it utilizes a very similar syntax structure. 
+  
+  The "geeglm()" function first accepts a formula. Within the formula, you can specify what model you're trying to fit. In the example below, we are trying to fit a model of the interaction of infant sex with the random effect of weeks on the dependent variable, maternal handling time. 
+    
+    The "family" argument is used to specify the distribution of the data. Note that normally distributed data needs to be classified as "gaussian" for this argument. If a family is not specified, the default for "geeglm" is, in fact, "gaussian". The "id" argument is used to specify how your data is clustered (i.e., what is your repeated measure?). In the example we're using, this is individual id. The "corstr" argument is used to specify what correlation structure (aka 'covariance structure') should be used for your model. The correlation structure is entirely dependent on the relationship between your repeated measures. In this example, observations within clusters are related to one another in equal chronological increments, and therefore, I employ an "ar1" structure. For more guidance on choosing an appropriate correlational structure, I recommend reading over Hanley et al., 2003 or Barnett et al., 2009. 
+    
+    As mentioned previously, the "waves" argument specifies the order in which observations occurred. This is important when using ar1 correlation structure because ar1 is based on the logic that observations are 'decaying' - in other words, the farther apart two observations are in time, the more indepedent they are. The waves argument can also be important when using "corstr = unstructured" or when there are gaps in the data. However, it doesn't hurt per se to specify waves for your model if using other correlational structures. Note that the default condition for the "waves" argument is NULL. 
+
+```{r}
+
+mat_sex <- geeglm(prop ~ sex + weeks, #effect of independent var on dependent var
+                  family = "gaussian", #specify distribution type
+                  id = id, #specify what the repeated measure is
+                  corstr = "ar1", #specify correlation structure
+                  waves = wave, #specify order in which samples occur
+                  data = handling_mat_gee)
+
+```
+
+
+
+##### DATA ANALYSIS: GEE TEST, PART TWO ("Interpreting results") #####
+
+  Now that we have run our model, it is time to interpret results. In order to see the results of our GEE test, we need to call the function "summary" and pass the object "mat_sex" which was created when we ran the test. At this time, if multiple models were ran, you could run the function "anova()" to test for which model fit the data best. In doing so, we would simply pass the two models through the anova() function. No additional arguments are needed to run this function. 
+
+```{r}
+
+summary(mat_sex) #gives results for GEE test run above 
+#anova(mat_sex, matsex2) hypothetical example if we were running multiple models
+
+```
+  By viewing the summary of "mat_sex" it is apparent that sex does not explain variation in maternal handling time, though age (in weeks) does. In other words, only age has a significant effect on the dependent variable. We can determine this by looking at the "coefficients" table within the results. Furthermore, the "Estimate" informs us that weeks has an inverse effect on handling time - the older an infant is, the less handling it receives from its mother. We can determine this solely based on whether the "Estimate" value is positive or negative. 
+  
+  Depending on how robust the data set is - you can run multiple varaibles as 'random effects' in your model, and then run mutliple models to assess model fit. However, because there are relatively few individuals included in this sample, running several models is strongly advised against, as this reduces the statistical power of the model and lends itself to falsely signficant results. 
+
+***One pitfall to "geepack" is that it does not report QIC values to determine model fits. If this is an essential part of your data analysis, I recommend tracking down a package called "qicpack" which is available on github. However, since assessing GEE model fitness with QIC scores is not the key point of interest for this tutorial, I'm not going review QICs or ANOVAs further for the GEE.  
+
+  Another option for learning more about the results of a GEE test is getting estimated marginal means - aka least square means - which gives the mean of the data when the effect of the independent variable is accounted for. One common complaint I found online about the geeglm package was that it did not automatically generate estimated marginal means, which is fairly to do in most statistical programs such as SPSS. However, there is one package, "doBy" which has the function "LS_sex" that can accomplish this for us using an output from either the gee or geepack packages. Additionally, the function "LS-means()" within the package "lsmeans" accomplishes the same principle. Either can be used, but "LSmeans" requires fewer steps. 
+  
+  In order to use the "LSmeans()" function, call an object produced by "geeglm()". It is not necessary to specify which variable needs to be considered as an effect for calculating the mean, as the function will automatically select the independent variable listed first in the GEE model. Also note that for larger models, multiple variables may be selected by employing "c()" and listing variables. You may receive a warning message that states that only the first independent variable is considered as an effect if the model includes more than one; in the example below this warning message is produced - however, it can generally be accepted without much stress because the random effect (aka the second listed variable) was already considered in creating the output of the original model. 
+
+```{r}  
+
+LS_sex <- (LSmeans(mat_sex, effect = "sex")) #compute ls means for mat_sex object
+
+```
+  
+
+
+##### DATA ANALYSIS: GEE TEST, PART THREE ("More examples") #####
+
+  Now that we have successfully run one GEE test of one variable, we can use the test again for other response varialbes. This section includes examples of other GEE tests.
+  
+```{r}
+
+#Maternal handling by maternal parity (age included):
+mat_par <- geeglm(prop ~ par + weeks,
+                  family = "gaussian", 
+                  id = id,
+                  corstr = "ar1",
+                  waves = wave,
+                  data = handling_mat_gee)
+summary(mat_par)
+
+#Maternal handling by group type (age included):
+mat_type <- geeglm(prop ~ type + weeks,
+                  family = "gaussian", 
+                  id = id,
+                  corstr = "ar1",
+                  waves = wave,
+                  data = handling_mat_gee)
+summary(mat_type)
+
+```
+
+
+
+##### DATA ANALYSIS: GLMM TEST, PART ONE ("Putting together the model") #####
+
+  As specified above, a GEE test is not suitable for nonmaternal handling data because there were fewer and smaller clusters. Therefore, we are going to try to find a fitting model using a Generalized Linear Mixed Model (GLMM) instead, because it does not have as strict of requirements and is very useful for small data sets. The theory behind GEEs and GLMMs is slightly different - GEEs tell us more so about the average, population effect on our outcome while GLMMs provide a more indiviual/cluster-specific explanation (Ghisletta and Spini, 2004). On a practical, coding level, however, GLMM is going to function much the same as our GEE did, with some notable exceptions. 
+  
+  First, to run a GLMM test, the most widely used package is lme4. Within this package either "lmer()"" or "glmer()" functions may be used. When data is distributed normally, "lmer()" is our go-to method. We have already transformed our data, therefore we can go ahead and use "lmer()".
+  
+  Similar to the model used earlier with "geeglm()", the first step to running "lmer()" is passing the formula with which you're going to create your model. For the example below, we're going to investigate the effect of group type on the amount of nonmaternal handling received by infants. Thus, we need to tell it to evalute the effect of "type" values on "x" values. If random effects are indcluded in the model, such as with "weeks" in the example below, we add them in with our independent variables. 
+  
+  Instead of using the "id" argument as we did with "geeglm()", we specify how the data is clustered using the format "+ ( | )". The number listed before your clustering scheme is generally set to 1 when using biological data. However, note that this can also be set to 0 or -1 depending on your data set. For the maternal data set, we did not have to evaluate a proportion of handling time per observed time because we can pass the "offset" argument when using "lmer". The offset allows us to specify that our sampling is uneven and furthermore specify exactly how the data set is uneven so it can be controlled for in our model. In our example, they are uneven because we had differences in focal time during 1 week periods. Therefore, we use set our "offset" argument equal to our "samp" values. 
+  
+  The last argument we need to pass in the "lmer" argument is "REML", which refers to whether we want our model to be fit using the restricted maximum likelihood criterion. The defult setting is TRUE, and this argument is optional. However, when only one or two variables are used within a model and the data has been sampled evenly, this argument can be set to FALSE. 
+  
+  One glorious thing about "lmer" is that it accepts data subsets. In other words, instead of calling an entire data frame, we could have called "data = subset(handling_nonmat_gee != "BE1")" to exclude certain portions of our data. In the example just listed, the model would fit based on all data except individual "BE1". 
+
+```{r}
+
+library(lme4) #load the package 
+
+#GLMM EXAMPLE 1
+
+nonmat_type <- lmer(log_x ~ type + weeks + #dependent, independent vars, also random effect
+                      (1 | id), #specifies how data is clustered
+                   data = handling_nonmat_gee, #specifies the data set
+                   offset = samp, #tells model to take into account sampling inequities
+                   REML = TRUE) #optional, tells model to use ReML criterion
+
+```
+
+  Generally speaking, it's not advised to run a bunch of different models. However, we can learn more about the model above by inquiring how the model fits differently based on whether one of our variables is included in the model or not. The output of the "drop1()" function gives us an AIC score for when variables are excluded from the model, and even compares to the null model. Generally, AIC scores that are very close together tells us that neither model fits the data particularly better than the other. In that case, we generally accept that null model. 
+  
+```{r}
+
+drop1(nonmat_type)
+
+```
+
+  The output we've received tells us there is little difference between the null and a model that just includes the effect of group type on nonmaternal handling. However, there is a large difference between the model that includes age and the others. In general, we are looking for the model with the lowest AIC value. 
+
+  In the event that we were using just a small model with one variable (and no random effects), instead of using "drop1" we would pass an 'empty' "lmer()" function to create a null model. This accomplishes the same principle. To demonstrate the usefulness of this method, I'm going to run a new nonmaternal handling, one that examines the effect of infant sex on nonmaternal handling. 
+  
+```{r}
+
+#GLMM EXAMPLE 2A
+
+#examine the effect of infant sex on nonmaternal handling
+nonmat_sex <- lmer(log_x ~ sex + #notice: no random effect used 
+                      (1 | id), 
+                   data = handling_nonmat_gee, 
+                   offset = samp, 
+                   REML = TRUE) 
+
+```
+  
+ Now we're going to create a null model. Remember, drop1 would accomplish the same task, since only one independent variable was entered into the model. For the null model, we are going to replace our independent variable with a 1. 
+  
+```{r}
+
+#GLMM EXAMPLE 2B
+
+nonmat_null <- lmer(log_x ~ 1 + #no indepedent variable or random effects entered
+                      (1 | id), #still need to specify clustering
+                    data = handling_nonmat_gee,
+                    offset = samp, #also still need to specify offset
+                    REML = TRUE)
+
+```
+
+
+
+##### DATA ANALYSIS: GLMM TEST, PART TWO ("Interpreting results") #####
+
+```{r}
+#Results for GLMM example 1
+summary(nonmat_type)
+
+```
+  
+  Unlike the "geeglm()" function, summarized results of the "lmer()" function do not include a reported significance statistic. However, we can infer directionality of trends by looking at the estimate of the fixed effects. For instance, we can infer that unimale groups generally have more nonmaternal handling (because the estimate is a positive value). Additionally, we can infer that the trend is probably not all that meaningful because we have a smallish t-value. Note that t-values are not directly used to determine significance, but significant p-values tend to correspond to really big t-values. 
+  
+  Because we don't have any straightforward way of reporting significance, it is more useful to compare GLMMs to the null model using the "drop1()" function (as we did before when we referred to differences in AIC values) or by using an "anova()" function. 
+  
+  Running an "anova()" using objects produced with "lmer" is relatively simple. The only required arguments are the TWO models you want to compare (in this case we want to compare our models from example #2). Note that objects passed in this argument must be of the same type, or else the anova will not run. For this example we are also going to include the argument "test" which is appropriate because we are using a categorical - rather than continuous - independent variable (i.e., multiparous, primiparous). 
+  
+```{r}
+
+anova(nonmat_sex, #object 1
+      nonmat_null, #object 2
+      test = "ChiSq") #optional, specifies test type used for anova
+
+summary(nonmat_sex)
+summary(nonmat_null)
+
+```
+
+  The results of the anova allow us to, again, consider AIC values in determining the best fit model. In this example, the AIC values are exactly the same, meaning that including infant sex in the model provides no further explanation about the variance in the data than the null model itself. 
+  
+***REALLY IMPORTANT FINAL NOTE: It is highly frowned upon in publications to report significance values and AIC scores. Mixing the two is seen with taboo (for lots of valid statistical reasons). Therefore, I would not recommend mixing and matching reporting schemes as I have done with this tutorial. Rather, the tutorial allows us to contemplate when GEEs should be used over GLMMs (and visa versa) for longitudinal, biological data sets with repeated measures AND how running these two types of models using R differs. 
+
+
+
+##### SESSION INFO #####
+
+```{r}
+
+sessionInfo()
+
+```
+
+```{r}
+
+##### EXACT CODE USED IN THIS TUTORIAL FOLLOWS #####
+
+rm(list=ls(all=T))
+getwd()
+handling_total <- read.csv("/Users/owner2/Desktop/Handling_abridged.csv")
+s_sample <- read.csv("/Users/owner2/Documents/sampling log.csv")
+str(handling_total)
+head(handling_total)
+#install packages (skip this step if packages already downloaded)
+#install.packages("plyr")
+#install.packages("dplyr")
+#install.packages("geepack")
+#install.packages("doBy")
+#install.packages("lme4")
+library("plyr")
+library("dplyr")
+library("geepack")
+library("doBy")
+library("lme4")
+handling_total <- merge(handling_total, s_sample)
+handling_total_gee <- handling_total[which(handling_total$event_type == "State start" &
+                                       handling_total$drop_overlap == "N"), 
+                                      c("ind_id",
+                                        "sex",
+                                        "age_weeks_trunc",
+                                        "maternal_parity",
+                                        "group_type",
+                                        "duration_adj_s",
+                                        "behavior_type",
+                                        "sampling_s")]
+handling_mat_gee <- handling_total_gee[handling_total_gee$behavior_type == "mat_han", ] 
+handling_nonmat_gee <- handling_total_gee[handling_total_gee$behavior_type == "nonmat_han", ] 
+handling_mat_gee <- aggregate(handling_mat_gee$duration_adj_s, 
+                         by = list(id = handling_mat_gee$ind_id, 
+                              weeks = handling_mat_gee$age_weeks_trunc, 
+                              sex = handling_mat_gee$sex, 
+                              type = handling_mat_gee$group_type, 
+                              par = handling_mat_gee$maternal_parity,
+                              samp = handling_mat_gee$sampling_s),
+                         FUN = sum, na.rm=T) 
+handling_nonmat_gee <- aggregate(handling_nonmat_gee$duration_adj_s, 
+                         list(id = handling_nonmat_gee$ind_id, 
+                              weeks = handling_nonmat_gee$age_weeks_trunc,
+                              sex = handling_nonmat_gee$sex, 
+                              type = handling_nonmat_gee$group_type, 
+                              par = handling_nonmat_gee$maternal_parity, 
+                              samp = handling_nonmat_gee$sampling_s),
+                         FUN = sum, na.rm=T)
+handling_mat_gee <- arrange(handling_mat_gee, 
+                            id, 
+                            weeks) 
+handling_nonmat_gee <- arrange(handling_nonmat_gee, 
+                               id, 
+                               weeks) 
+handling_mat_gee$prop <- handling_mat_gee[ ,"x"]/handling_mat_gee[ ,"samp"]
+handling_nonmat_gee$prop <- handling_nonmat_gee[ ,"x"]/handling_nonmat_gee[ ,"samp"]
+hist(handling_mat_gee$prop, 
+     breaks = 16, 
+     xlim = c(0, 1), 
+     ylim = c(0, 30), 
+     col = "grey", 
+     xlab = "maternal handling duration", 
+     main = "Histogram of maternal handling durations") 
+hist(handling_nonmat_gee$x, 
+     breaks = 16, 
+     xlim = c(0, 1200), 
+     ylim = c(0, 80), 
+     col = "grey", 
+     xlab = "nonmaternal handling duration", 
+     main = "Histogram of nonmaternal handling durations")
+max(handling_nonmat_gee$x)
+handling_nonmat_gee <- filter(handling_nonmat_gee, x < 1055) 
+hist(handling_nonmat_gee$x, 
+     breaks = 16, 
+     xlim = c(0, 600), 
+     ylim = c(0, 80), 
+     col = "grey", 
+     xlab = "nonmaternal handling duration", 
+     main = "Histogram of nonmaternal handling durations")
+qqnorm(handling_mat_gee$prop) 
+qqline(handling_mat_gee$prop) 
+qqnorm(handling_nonmat_gee$x)
+qqline(handling_nonmat_gee$x)
+handling_nonmat_gee$trans_x <- handling_nonmat_gee[ ,"x"] + 0.1 
+handling_nonmat_gee$log_x <- log(handling_nonmat_gee$trans_x)
+qqnorm(handling_nonmat_gee$log_x)
+qqline(handling_nonmat_gee$log_x)
+handling_mat_gee <- ddply(handling_mat_gee, 
+                          .variables = "id", 
+                          .fun = transform, 
+                          wave = seq_along(weeks)) 
+mat_sex <- geeglm(prop ~ sex + weeks, 
+                  family = "gaussian", 
+                  id = id, 
+                  corstr = "ar1", 
+                  waves = wave, 
+                  data = handling_mat_gee)
+summary(mat_sex) 
+LS_sex <- (LSmeans(mat_sex, effect = "sex"))
+mat_par <- geeglm(prop ~ par + weeks,
+                  family = "gaussian", 
+                  id = id,
+                  corstr = "ar1",
+                  waves = wave,
+                  data = handling_mat_gee)
+summary(mat_par)
+mat_type <- geeglm(prop ~ type + weeks,
+                  family = "gaussian", 
+                  id = id,
+                  corstr = "ar1",
+                  waves = wave,
+                  data = handling_mat_gee)
+summary(mat_type)
+nonmat_type <- lmer(log_x ~ type + weeks +  
+                      (1 | id), 
+                   data = handling_nonmat_gee, 
+                   offset = samp, 
+                   REML = TRUE) 
+drop1(nonmat_type)
+nonmat_sex <- lmer(log_x ~ sex + 
+                      (1 | id), 
+                   data = handling_nonmat_gee, 
+                   offset = samp, 
+                   REML = TRUE) 
+nonmat_null <- lmer(log_x ~ 1 + 
+                      (1 | id), 
+                    data = handling_nonmat_gee,
+                    offset = samp, 
+                    REML = TRUE)
+summary(nonmat_type)
+anova(nonmat_sex,
+      nonmat_null,
+      test = "ChiSq") 
+summary(nonmat_sex)
+summary(nonmat_null)
+
+```
+
+
+
+##### CITATIONS #####
+
+Barnett, A. G., Koper N., Dobson, A. J., Schmiegelow, F., & Manseau M. (2009). Selecting the correct variance-covariance structure for longitudinal data in ecology: a comparison of the Akaike, quasi-information and devaince information criteria. Methods in Ecology and Evolution, 1, 15-24. 
+
+Ghisletta, P., & Spini, D. (2004). An introduction to Generalized Estimating Equations and an application to assess selectivity effects in a longitudinal study on very old individuals. Journal of Educational and Behavioral Statistics, 29, 421-437.
+
+Hanley, J.A., Negassa, A., deB Edwardes, D. B., & Forrester, J. E. (2003). Statistical analysis of correlated data using Generalized Estimating Equations: an orientation. American Journal or Epidemiology, 157, 364-375. 
+
+Zeger, S. L., & Liang, K. Y. (1986). Longitudinal data analysis for discrete and continuous outcomes. Biometrics, 42, 121-130. 

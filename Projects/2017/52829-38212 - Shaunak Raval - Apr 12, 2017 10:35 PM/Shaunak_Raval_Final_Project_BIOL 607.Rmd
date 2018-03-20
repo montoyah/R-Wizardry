@@ -1,0 +1,234 @@
+---
+title: "BIOL 607: R-Wizardry Final Project"
+author: "Shaunak Raval"
+date: "March 17, 2017"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+rm(list=ls(all=TRUE))
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+
+###1.2###
+
+#install.packages("ggplot2")
+library(ggplot2)
+#install.packages("FactoMineR")
+library(FactoMineR)
+#install.packages("data.table")
+library(data.table)
+
+###1.3###
+
+setwd(choose.dir(caption = "Please Select Exports Folder (Must contain all the validated .csv files to be used for further analysis, and no other)")) #Prompts user to choose the "Exports" folder
+Working_dir <- getwd() #Path to "Exports" folder 
+temp_files <- list.files(path = Working_dir , pattern = "*.csv") #Compiles names of .csv files stored in the "Exports" folder
+temp_list <- lapply(temp_files, function(x){read.csv(file = x, header = TRUE)}) #Simultaneously reads and stores all the .csv files (as data frames) in a list from the "Exports" folder
+
+
+###1.4###
+
+
+Trimmed_list <- lapply(temp_list, "[", c("Replicate", "Start", "Stop", "z", "Percent.Corrected.Fitted.Deuteration" )) #Five columns from each data frames in the list are extracted and stored in a new list
+
+Ordered_list <- lapply(Trimmed_list, function(x) x[order(x["Replicate"], decreasing = FALSE ), ]) #All elements of the new list are ordered according to the "Replicate" column 
+
+Combined_ordered_list <- lapply(Ordered_list, function(x) within(x, start_stop_z <- paste(x$"Start", x$"Stop", x$"z", sep = "-")))#Combine "Start", "Stop", and "z" columns of the ordered list and add it to the existing list 
+
+Combined_char_ordered_list <- lapply(Combined_ordered_list, function(x) within(x, Replicate_Char <- paste(x$"Replicate"))) #Adds column of replicate(character) to the existing list
+
+
+
+Working_list_long <- lapply(Combined_char_ordered_list, "[", c("Replicate_Char", "start_stop_z", "Percent.Corrected.Fitted.Deuteration"))#List of data frames with replicate(character), start_stop_z, and %corrected fitted deuteration columns (long format)
+
+
+###1.5###
+
+Working_list_wide <- lapply(Working_list_long, function(x) data.frame(matrix(data = x$"Percent.Corrected.Fitted.Deuteration", nrow = length(unique(x$"Replicate_Char")), ncol = length(unique(x$"start_stop_z")), byrow = TRUE), row.names = unique(x$"Replicate_Char"))) #converts list of data frames to wide format
+
+Transposed_start_stop_z <- lapply(Working_list_long, function(x) t(data.frame(c(unique(x$"start_stop_z"))))) #Transposes the peptide identity column(start_stop_z) 
+
+
+for (i in 1:length(Working_list_wide)){
+  names(Working_list_wide[[i]]) <- Transposed_start_stop_z[[i]]
+} #loops through list of transposed start_stop_z column and assigns them as column names of the wide format list
+
+
+Additional_rep_column <- lapply(Working_list_wide, function(x) data.frame(row.names(x)))
+for(i in 1:length(Additional_rep_column)){
+  names(Additional_rep_column[[i]]) <- c("Sample")
+} #creates of a list of replicate columns from wide format and renames every column as "Sample"
+
+Working_list_complete <- list()
+for(i in 1:length(Additional_rep_column)){
+  Working_list_complete[[i]] <- data.frame(cbind(Working_list_wide[[i]], Additional_rep_column[[i]]))
+} #combines wide format data frames and sample column 
+
+
+Working_matrix <- rbindlist(lapply(Working_list_complete, as.data.frame.list),fill = TRUE) #binds rows of data frames in a list to provide a matrix containing all the deuteration data
+
+
+###1.6.1###
+
+Class_column <- Working_matrix[ , "Sample"]
+Class_column$Sample <- as.character(Class_column$Sample)
+Class_column$Sample <- sub("[^[:alnum:]]", "", Class_column$Sample, ignore.case = TRUE)
+Class_column$Sample <- sub("Data", "", Class_column$Sample, ignore.case = TRUE)
+Class_column$Sample <- sub(".wiff", "", Class_column$Sample, ignore.case = TRUE)
+Class_column$Sample <- sub("_", "", Class_column$Sample, ignore.case = TRUE)
+Replicate_column <- Class_column #This chunk of code modifies the "Sample" column of the working matrix by removing the extraneous characters from every entry. 
+
+
+###1.6.2###
+
+
+Class_column$Sample <- substr(Class_column$Sample, 1, nchar(Class_column$Sample)-3) #Removes numbers from sample entries 
+
+Working_matrix <- subset(Working_matrix, select = -c(Sample)) #Removes sample column with extraneous characters
+
+Working_matrix <- cbind(Class_column, Working_matrix)#binds class variable to working matrix
+
+colnames(Working_matrix) <- sub(colnames(Working_matrix[,1]), "Class", colnames(Working_matrix), ignore.case = TRUE) #column name is changed from "Sample" to "Class"
+
+Working_matrix <- cbind(Replicate_column, Working_matrix) #binds "Sample" column without extraneous characters to the working matrix
+
+
+###1.7###
+
+
+temp_control_files <- choose.files(caption = "Please choose the .csv file indicating binding assignment (NOTE: The folder must not contain any additional .csv files)") #User is asked to provide location of the "Binding_Assignment.csv"
+
+temp_control_df <- as.data.frame(read.csv(paste(gsub("\\", "/", temp_control_files, fixed =TRUE)), header = TRUE, stringsAsFactors = FALSE)) #reads binding assignment file
+
+merged_column <- merge(Class_column, temp_control_df, by = "Sample", all= TRUE) #Class column of the working matrix is merged with the binding assignment by sample column
+
+Working_matrix <- cbind(merged_column[,"Binding.Non.binding"], Working_matrix) #Binding or non-binding designation is added to the working matrix
+
+Working_matrix[,"Class"] <- merged_column[,"Class"] #Class column is replaced with the new class column based on the information from binding assignment file
+
+Working_matrix <- Working_matrix[order(Working_matrix[,"Binding.Non.binding"])] #working matrix is ordered according to the binding/non-binding column
+
+Working_matrix <- as.data.frame(Working_matrix) #working matrix was created using rbindlist() function from the data.table package. In order to avoid any problems in the subsequent code, it is reverted back to the data frame format
+
+Working_matrix[Working_matrix <= 0] <- NA #missing values in the working matrix are assigned NA
+
+
+###1.8###
+
+limit_for_NA <- round(nrow(Working_matrix)/2) #value equal to the half the number of rows in working matrix
+
+Working_matrix <- Working_matrix[ , which(as.numeric(colSums(!is.na(Working_matrix)))>limit_for_NA)] #This chunk of code removes columns of the working matrix that contain 50% or more NAs
+
+
+Working_matrix$Sample <- sub("00", "_", Working_matrix$Sample)
+pep_ions <- colnames(Working_matrix)[c(4:length(colnames(Working_matrix)))]
+pep_ions <- sub("X", "", pep_ions)
+pep_ions <- gsub("[[:punct:]]", "-", pep_ions)
+pep_ions <- paste(pep_ions, "+", sep = "")
+colnames(Working_matrix)[c(4:length(colnames(Working_matrix)))] <- pep_ions #This chunk of code modifies the column names (peptide identity) of the working matrix by converting them to the start-stop-z+ format. 
+
+Working_matrix[sapply(Working_matrix, is.character)] <- lapply(Working_matrix[sapply(Working_matrix, is.character)], as.factor) #converts character vectors in the working matrix to factors
+
+Working_matrix_dt <- data.table(Working_matrix)
+Grouped_matrix <- Working_matrix_dt[ , lapply(.SD, mean), by = "Class", .SDcols = names(Working_matrix_dt)[4:ncol(Working_matrix_dt)]] #calculates average %deuterium incorporated for each peptide by class and creates a new matrix of these average value 
+
+dir.create("Condensed matrices") #creates a directory in the "Exports" folder to save the matrices
+write.csv(Working_matrix, file = paste(Working_dir, "/", "Condensed matrices", "/","Workingmatrix.csv", sep = ""), row.names = FALSE)
+write.csv(Grouped_matrix, file = paste(Working_dir, "/", "Condensed matrices", "/","Groupedmatrix.csv", sep = ""), row.names = FALSE)
+
+
+
+###1.9###
+
+##deuteration plots##
+
+dir.create("Deuteration plots")#creates a directory in the "Exports" folder to save the deuteration plots
+
+for(i in 4:ncol(Working_matrix))
+{
+  pathname <- file.path(paste(Working_dir, "/", "Deuteration plots", "/", colnames(Working_matrix[i]), ".tiff", sep = "")) #creates path to the working directory to save the deuteration plots with corresponding peptide title
+  tiff(file = pathname, width = 1920, height = 1080) #file format and resolution
+  
+print(ggplot(Working_matrix, aes(Sample, Working_matrix[,i], fill = Class)) +
+  ggtitle(colnames(Working_matrix[i])) +
+  geom_point(aes(color = Binding.Non.binding), size = 9, na.rm = TRUE) +
+  geom_line(color = "black", group = 1, size = 1.5, stat = "density", alpha = 0.5, na.rm = TRUE)+
+  ylab("% Relative Deuteration") +
+  ylim(0,100) +
+  geom_hline(yintercept = mean(Working_matrix[Working_matrix$Class == "Control", i], na.rm = TRUE)) +
+  theme(legend.position = "right", legend.title = element_blank(), title = element_text(color = "black", size = 30), axis.text = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 25, face = "bold"), panel.background = element_rect(fill = "white", color = "white"), axis.line = element_line(color = "black", size = 2.5), legend.text = element_text(size = 25), axis.ticks.length = unit(0.5, "cm")) +
+  guides(alpha = FALSE, fill = FALSE))
+
+dev.off() #closes the plotting device
+} #This chunk of code creates deuteration plots (%relative deuteration vs. sample) by looping through the columns of the working matrix. One plot for each peptide is created and saved as a high resolution tiff file in the "Exports" folder. Each plot has the a horizontal line indicating the mean value for the non-binding class of ligand. Color of the data points also indicate bindind or non-binding assignment for each sample. 
+
+
+##PCA##
+
+
+working_matrix_PCA_no_NA <- Working_matrix[ , colSums(is.na(Working_matrix)) == 0] #columns containing NAs are removed from the working matric prior to performing PCA
+Working_PCA <- PCA(working_matrix_PCA_no_NA[-c(1:3)], graph = FALSE) #PCA() function from FactoMineR package is used to perform PCA 
+
+
+dir.create("Scores plots") #directory is created to save the Scores plots
+Ind_prin_comp_1 <- Working_PCA$ind$coord[,1]
+Ind_prin_comp_2 <- Working_PCA$ind$coord[,2]
+Ind_prin_comp_3 <- Working_PCA$ind$coord[,3]
+Ind_prin_comp_4 <- Working_PCA$ind$coord[,4]
+Ind_prin_comp_5 <- Working_PCA$ind$coord[,5] #first five scores
+
+Working_PCA_plot_matrix <- as.data.frame(cbind(Working_matrix[c(1:3)], Ind_prin_comp_1, Ind_prin_comp_2, Ind_prin_comp_3, Ind_prin_comp_4, Ind_prin_comp_5)) #data frame containing sample, class, binding assignment and, five scores
+
+for(i in 4:7) 
+{
+ggplot(Working_PCA_plot_matrix, aes(Working_PCA_plot_matrix[,i], Working_PCA_plot_matrix[,i+1], color = Binding.Non.binding)) +
+  ylab(paste("Prin_comp_", i-2, sep = "")) +
+  xlab(paste("Prin_comp_", i-3, sep = "")) +
+  geom_point(size = 3) +
+  geom_text(aes(label = Sample), nudge_y = 0.5) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  theme(legend.title = element_blank()) 
+ggsave(filename = paste("PCA_Ind","-", i-3, ".tiff", sep = ""), path = paste(Working_dir, "/", "Scores plots", sep = ""), dpi = 300, height = 9, width = 16, units = c("in"))
+} #This chunk of code creates scores plots and saves them in the "Exports" folder
+
+
+
+dir.create("Loadings plots") #directory is created to save the Loadings plots
+Var_prin_comp_1 <- as.numeric(Working_PCA$var$coord[,1])
+Var_prin_comp_2 <- as.numeric(Working_PCA$var$coord[,2])
+Var_prin_comp_3 <- as.numeric(Working_PCA$var$coord[,3])
+Var_prin_comp_4 <- as.numeric(Working_PCA$var$coord[,4])
+Var_prin_comp_5 <- as.numeric(Working_PCA$var$coord[,5]) #first five loadings 
+Ion <- colnames(working_matrix_PCA_no_NA[-c(1:3)])
+
+Working_PCA_plot_matrix_2 <- data.frame(Ion, Var_prin_comp_1, Var_prin_comp_2, Var_prin_comp_3, Var_prin_comp_4, Var_prin_comp_5, row.names = NULL) #data frame containing peptide identity column, and first five loadings
+
+
+for(i in 2:5)
+  {
+ggplot(Working_PCA_plot_matrix_2, aes(Working_PCA_plot_matrix_2[,i], Working_PCA_plot_matrix_2[,i+1])) +
+  ylab(paste("Prin_comp_", i, sep = "")) +
+  xlab(paste("Prin_comp_", i-1, sep = "")) +
+  geom_point(size = 3) +
+  geom_text(aes(label = Ion), nudge_y = 0.03) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  ylim(-1,1)+
+  xlim(-1,1)+
+  theme(legend.title = element_blank(), axis.text.x = element_blank(), axis.text.y = element_blank())
+ggsave(filename = paste("PCA_Var", "-", i-1, ".tiff", sep = ""), path = paste(Working_dir, "/", "Loadings plots", sep = ""), dpi = 300, height = 9, width = 16, units = c("in"))
+} #This chunk of code creates loadings plots and saves them in the "Exports" folder
+
+sessionInfo()
+
+```
+
+
+

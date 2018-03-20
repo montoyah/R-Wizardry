@@ -1,0 +1,1459 @@
+---
+title: "Using R to Analyze and Represent 3D Film Data"
+author: "Madison Bradley, University of Calgary Mouse Performance Lab"
+date: "R Wizardry (BIOL 607) Winter 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Table of Contents
+
+
+* Introduction
+* Kinematic Analysis of Film Data
+* Visual Representation 
+* Simple Statistical Analysis
+* Session Info
+* Literature Cited
+
+
+# **Introduction** 
+## Background Information
+
+  Species that move by jumping have convergently evolved hind-limb elements (tibiae, tarsals, metatarsals) that are long relative to their body size and fore-limb length [1-7]. Jumping species are diverse, including frogs, locusts, kangaroos, and tarsiers [2-8]. It is assumed that limb elongation increases the time over which the muscles contract, thereby increasing acceleration and take-off velocity [2-6]. This assumption, however, has rarely been tested both between species and by comparing individuals with different limb lengths within a species [8,9].  
+  
+  Model organisms, such as mice, facilitate tightly controlled and repeatable studies of evolutionary hypotheses within a lab setting. The Longshanks (LS) mouse has been artificially selected to have a 15% longer tibia and a 10% longer femur with no change in body mass over 20 generations [10]. The LS model offers a unique opportunity to study variation within a single species at the population level as a model for how locomotor specializations can occur, while controlling for confounding factors such as nutrition, genetic background, body mass, and age. Ultimately, the maximal jumping performance (i.e. jump height) of the LS mice should be greater as a consequence of different musculoskeletal kinematics. 
+  
+  To quantitatively assess jumping performance, mice are trained from weaning to jump for a food reward to a raised platform within a filming enclosure. This training protocol ensures behavior is voluntary and standardized across individuals. High speed film is taken at 250 frames per second by three cameras with overlapping fields to gather precise three-dimensional spatial data of landmarked hind-limb joints and segments (Figure 1, Figure 2). The high-speed cameras are post-triggered, meaning that they continuously record until the desired locomotor behavior occurs and then the previous second of film is saved. This means the film sequence often needs to be cropped for standardization across individuals (more on that later).
+  
+
+![](C:/Users/Owner/Desktop/RWizardry/Final Project/coordinatedata/filmsetup.png)
+
+
+> Figure 1. Filming set-up using three cameras with overlapping fields of view 
+
+![](C:/Users/Owner/Desktop/RWizardry/Final Project/coordinatedata/landmarks.png)
+
+
+> Figure 2. Landmark placement on mouse hindlimb
+  
+  Pairs of cameras can be calibrated in ProAnalyst using a calibration fixture that contains a physical matrix of known reference points. This calibration fixture is placed in the field of view of the cameras. Landmarks placed on the hindlimb of the mice are digitized in 3D space for each recorded frame. This data can then be used to calculate kinematic variables, such as: take-off duration, resultant take-off velocity, angular velocity, and angular acceleration. 
+  While ProAnalyst is a useful tool for digitization, it has limited analysis and visualization capabilities. Perhaps more importantly, it is a "black box" program. Only the input and output are manipulatable by the user while the underlying code and formulae are obscured. This tutorial proposes an alternative method for film analysis and data visualization using base R, an open source and open access coding language, as well as R packages that are openly available. 
+
+
+## Inputting Datasets 
+
+The output of ProAnalysts digitization is a long format excel spreadsheet with double headers. Before data can be input to R, it must be converted into a single header comma deliminated text file (a .csv file). Each data set contains a series of x,y,z coordinates for each landmark (functionally for each joint) and the angles around the joints for every frame of a single sequence. Data sets were cropped from initiation of jumping behavior to 5 frames post take-off for consistency. For the purposes of this tutorial, there will be four sequences (four individuals belonging to two treatments) read into the global environment using the "read.csv" function. Each of the four jumps were to a height of 15cm. 
+
+
+```{r, echo=TRUE, results="hide"}
+#start session by clearing the clearing the environment 
+rm(list=ls(all=TRUE))
+#check the current working directory
+getwd()
+#set the working directory to where the data sets are saved
+setwd("C:/Users/Owner/Desktop/RWizardry/Final Project/coordinatedata")
+
+#header is true because the first row is column names
+##copy address of files from file explorer 
+
+#Control line mice 
+
+###Data for individual AC1
+####jump 1, height = 15cm
+ac1_1<-read.csv("file:///C:/Users/Owner/Desktop/RWizardry/Final Project/coordinatedata/AC_1_standardizeddata_seq1_15cm.csv", header=TRUE, check.names = FALSE)
+###Data for individual CC1
+####jump 1, height = 15cm
+cc1_1<-read.csv("file:///C:/Users/Owner/Desktop/RWizardry/Final Project/coordinatedata/CC_1_standardizeddata_seq1_15cm.csv",header=TRUE, check.names = FALSE)
+
+#Longshanks line 2 strain
+
+###Data for individual P2
+####jump 1, height = 15cm
+p2_1<-read.csv("file:///C:/Users/Owner/Desktop/RWizardry/Final Project/coordinatedata/P2_1_standardizeddata_seq1_15cm.csv",header=TRUE, check.names = FALSE)
+
+###Data for individual N2
+####jump 1, height = 15cm
+
+n2_1<-read.csv("file:///C:/Users/Owner/Desktop/RWizardry/Final Project/coordinatedata/P2_1_standardizeddata_seq1_15cm.csv",header=TRUE, check.names = FALSE)
+
+
+```
+
+
+
+
+Datasets ac1_1, cc1_1, p2_1, and n2_1 are now stored in the global environment. Use the head() and str() functions to get to know the datasets.
+
+
+
+
+```{r}
+str(ac1_1)
+head(ac1_1)
+
+#repeat for other datasets if need be 
+
+```
+
+## Installing and Loading Packages
+
+All packages are accessible from within R using the "install.packages()" function (see code).
+
+### ggplot2 
+
+  The ggplot2 package is used within this tutorial for layered plotting using 'Grammar of Graphics' syntax. 
+  
+For further documentation visit: [ggplot CRAN](https://cran.r-project.org/web/packages/ggplot2/ggplot2.pdf)
+
+### dplyr
+  
+  The dplyr package is used within this tutorial for data manipulation. The dplyr syntax and use of pipes is at times more intuitive than that of base R, allowing for more efficient and understandable code.  
+  
+For further documentation visit: [dyplr CRAN](https://cran.r-project.org/web/packages/dplyr/dplyr.pdf)
+
+### linkR
+
+  Animal bodies have evolved to act as 3D lever systems with mechanical linkages and can thus be analyzed and represented as such. While there are many software packages available that can perform those functions, they are often prohibitively expensive and closed-source (like ProAnalyst). linkR is free, open-source, and allows for subsequent researchers to view the steps of analysis enabling replicability. 
+
+For further documentation visit: [linkR CRAN](https://cran.r-project.org/web/packages/linkR/linkR.pdf) and [linkR tutorial](https://aaronolsen.github.io/software/linkr/Modeling%20linkages%20using%20linkR%20v1.1.pdf)
+
+### svgViewR
+
+  The svgViewR package is an important dependency of linkR. It enables the use to produce interactive 3D visualizations in .html file format. These .html files are viewable in compatible browsers such as: Firefox, Chrome, Safari (i.e. anything that is not Internet Explorer).
+  
+For further documentation visit: [svgViewR CRAN](https://cran.r-project.org/web/packages/svgViewR/svgViewR.pdf)
+
+```{r,echo=TRUE, message=FALSE, results="hide"}
+#remove "#" in code to install packages from the CRAN repository (this only needs to be done once)
+
+#install.packages("ggplot2")
+#install.packages("dplyr")
+#install.packages("linkR")
+#install.packages("svgViewR")
+
+#calling downloaded packages into the global environment 
+library(ggplot2)
+library(dplyr)
+library(svgViewR) #if you forget to load svgViewR, the most recent version of linkR will load it automatically
+library(linkR)
+
+```
+
+***
+
+# **Kinematic Analysis of Film Data**
+
+In order to quantitatively describe the performance of the mouse jumps, we can perform kinematic analysis. Kinematics is essentially the geometry of motion and describes motion of objects without consideration of the forces acting on the system or the mass of the moving objects [11]. 
+
+## Take-off time
+
+First, a simple calculation to see how long it takes the mouse to leave the ground after initiating the behaviour. The film data is taken at 250 frames per second, so we can calculate the time interval and store it as an object. 
+
+```{r}
+time.int<-1/250
+time.int
+```
+
+It's possible to manually calculate the take-off time for each dataset, but the introduction of more typing equates to the introduction of more mistakes. Instead, let's build a function using the same equation but make it more generalized by removing the specific names of the data sets and replacing it with a function parameter. Once the function is built, it can be used to create a vector of take-off times for all the individuals. This vector can then be combined with an vector of identifiers and a vector of strains of the same length using data.frame() to produce a data frame to be used later during statistical analysis. 
+
+```{r}
+
+##can just calculate for each data set
+(nrow(ac1_1)-5)*time.int
+
+## or with a function
+takeoff.time<- function(data){
+  (nrow(data)-5)*time.int
+}
+
+#now let's calculate take off time for all of the individuals
+times<-c(takeoff.time(ac1_1),takeoff.time(cc1_1),takeoff.time(n2_1),takeoff.time(p2_1))
+indiv<-c("ac1","cc1","n2","p2")
+strain<-as.factor(c("control","control","longshanks","longshanks"))
+
+#use data.frame instead of cbind to make sure that the original types of data (i.e. numeric for the time and character otherwise) are maintained
+takeoff.times<-data.frame(times,indiv,strain)
+
+
+
+```
+
+```{r, echo=FALSE}
+
+print(takeoff.times)
+str(takeoff.times)
+
+```
+
+## Take-off velocity
+
+Take-off velocity is the resultant velocity as the mouse leaves the ground. This is calculated as the difference in position vector between the final frame and the immediately preceeding frame in cm/s. The dataset was manually cropped during digitization, so there are always 5 frames after take-off. To calculate take-off velocity, use the hip landmark. The hip is representative of the trajectory of the body as a whole because it is not a highly mobile landmark (as compared to the knee). This will be shown qualitatively later in the tutorial (Figure 4). 
+
+The formula used by this function is: 
+
+$$ v _{takeoff} = \frac { ((x _{2} -x _{1} ) ^{2} +(y _{2} -y _{1} ) ^{2} + (z _{2} -z _{1} ) ^{2} ) ^{0.5} }  { \Delta time} $$  
+
+In the following code, there are two examples of how to build this function dependent on the circumstance. All film sequences were taken at 250fps, so it is not necessary in this case to be able to toggle the time interval, but having a more flexible function may be useful for other cases. The output of this function can be put into a data frame for later using data.frame(), just like the take-off time example. 
+
+```{r,results="hide"}
+#calculating take-off velocity for a single data set without a function 
+((((ac1_1[(nrow(ac1_1)-6),"HIP_X"]-ac1_1[(nrow(ac1_1)-5),"HIP_X"])^2)+((ac1_1[(nrow(ac1_1)-6),"HIP_Y"]-ac1_1[(nrow(ac1_1)-5),"HIP_Y"])^2)+((ac1_1[(nrow(ac1_1)-6),"HIP_Z"]-ac1_1[(nrow(ac1_1)-5),"HIP_Z"])^2))^0.5)/time.int
+
+
+#they all have the same column names by default so we can make a function that only needs to take in the name of the data set. 
+
+takeoff.velocity<- function(data){
+  ((((data[(nrow(data)-6),"HIP_X"]-data[(nrow(data)-5),"HIP_X"])^2)+((data[(nrow(data)-6),"HIP_Y"]-data[(nrow(data)-5),"HIP_Y"])^2)+((data[(nrow(data)-6),"HIP_Z"]-data[(nrow(data)-5),"HIP_Z"])^2))^0.5)/time.int
+}
+ 
+##flexible version of the function that allows full flexibility of parameters and allows for 2D analysis as well
+
+takeoff.velocity.flex<- function(data,x,y,z=NULL,dtime){
+  ((((data[(nrow(data)-6),x]-data[(nrow(data)-5),x])^2)+((data[(nrow(data)-6),y]-data[(nrow(data)-5),y])^2)+((data[(nrow(data)-6),z]-data[(nrow(data)-5),z])^2))^0.5)/dtime
+}
+
+
+
+```
+
+```{r, echo=FALSE}
+
+#let's make a data frame for takeoff velocity like we did for takeoff time
+v.takeoff<-c(takeoff.velocity(ac1_1),takeoff.velocity(cc1_1),takeoff.velocity(n2_1),takeoff.velocity(p2_1))
+indiv<-c("ac1","cc1","n2","p2")
+strain<-as.factor(c("control","control","longshanks","longshanks"))
+
+#use data.frame instead of cbind to make sure that the original types of data (i.e. numeric for the time and character otherwise) are maintained
+v.takeoffs<-data.frame(v.takeoff,indiv,strain)
+
+
+print(v.takeoffs)
+#str(v.takeoffs)
+
+```
+
+## Angular Velocity
+
+Biomechanical angular velocity measures the angular rate of change of a body segment around a joint. When digitizing, it is possible to measure the angle of segments around a landmark (in this case, a joint) for each frame. It is then possible to find the angular velocity of a joint for the whole jump sequence. This is a useful measure in biomechanics because it assesses the velocity of extension and/or flexion of body segments, as well as the timing of peak angular velocity. 
+
+### Unstandardized Angular Velocity
+
+This function uses the equation:
+
+$$ v_{ang} = \frac  { \theta_{i + 1} - \theta_{ i}} { \Delta t } $$
+where \theta _i_ is the angle in degrees and _t_ is time measured in seconds. 
+
+It is considered "unstandardized" because it doesn't account for different take-off times. 
+
+In order to quantify a curve of instaneous velocities through time, it will be necessary to build a for loop. To prevent future suffering, this for loop is nested within a function. 
+
+
+```{r}
+
+angular_velocity<- function(data,joint1=NULL,joint2=NULL, joint3=NULL,time.int=0.004){
+  joints<-c(joint1,joint2,joint3)
+  ang_vel<-matrix(NA,nrow=nrow(data)-1,ncol=3,dimnames=list( NULL,c("Hip_Ang_Vel","Knee_Ang_Vel","Ankle_Ang_Vel")))
+  idnum<-0
+  for(j in joints){
+    if(!is.null(j)){
+      joint<-data[,j]
+      idnum<-idnum+1
+      for(i in 1:(nrow(data)-1)){
+        ang_vel[i,idnum]<-(joint[i+1]-joint[i])/time.int
+      }
+    }
+  }
+  return(ang_vel)
+}
+
+```
+
+The angular_velocity() function is able to take in a minimum of one joint and a maximum of three joints. The "time.int=" parameter is set to a default of 0.004 seconds because that is what suits the data, but it can be changed if necessary. 
+
+Before the first for loop within the function, a vector of the three joints needs to be created, as well as an empty matrix to hold the calculated values. The matrix must have one less number of rows than the original data set because it is comparing the difference between positions along a column. 
+
+The first for loop goes through each joint and passes to the second loop where the formula is housed. The if statement makes the function flexible by enabling it to recognize whether a joint parameter is null and if the first loop should loop through to another joint. The second (i.e. nested) for loop runs through the angles within the data set at position [i] and calculates the change between the angle at position [i] and the angle directly after [i+1]. 
+
+```{r}
+#use the angular_velocity function for all the data sets 
+ang_vel_ac1_1<-angular_velocity(data=ac1_1,joint1="HIP_ANG",joint2 = "KNEE_ANG",joint3 = "ANKLE_ANG")
+ang_vel_cc1_1<-angular_velocity(data=cc1_1,joint1="HIP_ANG",joint2 = "KNEE_ANG",joint3 = "ANKLE_ANG")
+ang_vel_n2_1<-angular_velocity(data=n2_1,joint1="HIP_ANG",joint2 = "KNEE_ANG",joint3 = "ANKLE_ANG")
+ang_vel_p2_1<-angular_velocity(data=p2_1,joint1="HIP_ANG",joint2 = "KNEE_ANG",joint3 = "ANKLE_ANG")
+
+## make results of all individuals into a four data frames using cbind() and time, individual and strain vectors 
+
+#AC1
+ang_vel_ac1_1<-as.data.frame(ang_vel_ac1_1, stringsAsFactors=FALSE) #as.data.frame so that different types of data can be in it. the default output of the function is a matrix, which can only hold one type of data. 
+time<- seq(from=0.004,to=0.004*nrow(ang_vel_ac1_1),by=0.004)
+individual<- rep("ac1",length=nrow(ang_vel_ac1_1))
+Strain<- rep("control",length=nrow(ang_vel_ac1_1)) #use capital "S" because the object strain already exists in environment from earlier
+ang_vel_ac1_1<-cbind(time,ang_vel_ac1_1,individual,Strain)
+
+```
+
+
+
+
+
+```{r, echo=FALSE}
+print(ang_vel_ac1_1)
+str(ang_vel_ac1_1)
+```
+
+Repeat the above for individuals CC1, N2, and P2 (see full R script). 
+
+
+```{r, echo=FALSE}
+#CC1
+ang_vel_cc1_1<-as.data.frame(ang_vel_cc1_1, stringsAsFactors=FALSE) #as.data.frame so that different types of data can be in it
+time<- seq(from=0.004,to=0.004*nrow(ang_vel_cc1_1),by=0.004)
+individual<- rep("cc1",length=nrow(ang_vel_cc1_1))
+Strain<- rep("control",length=nrow(ang_vel_cc1_1))
+ang_vel_cc1_1<-cbind(time,ang_vel_cc1_1,individual,Strain)
+
+
+#N2
+ang_vel_n2_1<-as.data.frame(ang_vel_n2_1, stringsAsFactors=FALSE) #as.data.frame so that different types of data can be in it
+time<- seq(from=0.004,to=0.004*nrow(ang_vel_n2_1),by=0.004)
+individual<- rep("n2",length=nrow(ang_vel_n2_1))
+Strain<- rep("longshanks",length=nrow(ang_vel_n2_1))
+ang_vel_n2_1<-cbind(time,ang_vel_n2_1,individual,Strain)
+
+
+#P2
+ang_vel_p2_1<-as.data.frame(ang_vel_p2_1, stringsAsFactors=FALSE) #as.data.frame so that different types of data can be in it
+time<- seq(from=0.004,to=0.004*nrow(ang_vel_p2_1),by=0.004)
+individual<- rep("p2",length=nrow(ang_vel_p2_1))
+Strain<- rep("longshanks",length=nrow(ang_vel_p2_1))
+ang_vel_p2_1<-cbind(time,ang_vel_p2_1,individual,Strain)
+
+
+
+
+```
+
+Join the four dataframes created for each individual using dyplr and the full_join() function. Using nested full_join() functions will keep all the information from all the input datasets. It is important that the dataframes are all structured the same and have the same column names. Use the str() function following full_join() to make sure the new data frame is structured correctly.
+
+*Note: this will produce a warning message because the some of the columns used in the join are factors with different levels. In order to not lose any information, dyplr converts the factors to character values.* 
+
+```{r, warning=FALSE}
+##join using dplyr
+
+angular.velocity<- full_join(ang_vel_ac1_1,full_join(ang_vel_cc1_1,full_join(ang_vel_n2_1,ang_vel_p2_1)))
+
+
+```
+
+```{r, echo=FALSE}
+
+str(angular.velocity) #everything looks ok 
+
+```
+
+### Standardized Angular Velocity 
+
+In order to directly compare the timing of the maximum angular velocities of different sequences, the sequences must be standardized. Because each sequence has a different length of time, the easiest way to standardize is to interpolate the values for each sequence from 0% to 100% of sequence length. To interpolate in R, use the approx() function. The approx() function gives an x and y output, where x is the position along the sequence and y is the interpolated angle value using a linear approximation.  
+
+
+```{r}
+####using approx() function to interpolate from 0 to 100 %
+
+approx(seq_along(ac1_1[,"HIP_ANG"]),ac1_1[,"HIP_ANG"],n=100)
+
+```
+
+
+Rather than use the base approx() function for each joint of each individual sequence, let's create an interpolate() function that will loop through a given data set and return a matrix of standarized values for each joint. 
+
+```{r}
+
+# specify $y within the for loop because the $y output is all we want from the approx() function 
+
+interpolate<- function(data,joint1=NULL,joint2=NULL, joint3=NULL){
+  joints<-c(joint1,joint2,joint3)
+  inter<-matrix(NA,nrow=100,ncol=3,dimnames=list(NULL,c("Hip_Ang","Knee_Ang","Ankle_Ang")))
+  idnum<-0
+  for(j in joints){
+    if(!is.null(j)){
+      joint<-data[,j]
+      idnum<-idnum+1
+      inter[,idnum]<-approx(seq_along(joint),joint,n=100)$y
+    }
+  }
+  return(inter)
+}
+
+int.ac1_1<-interpolate(ac1_1,"HIP_ANG","KNEE_ANG","ANKLE_ANG")
+ 
+
+```
+
+To save ourselves some trouble, let's combine the angular_velocity() and interpolate() functions into a standardized.angular.velocity() function 
+
+This function uses the equation:
+
+$$ v_{ang} = \frac  { \theta_{i + 1} - \theta_{ i}} { \Delta T } $$
+
+where \theta _i_ is the angle in degrees and _T_ is now a standardized percentage of time from 0-100%. 
+
+```{r}
+# time interval needs to change because of the interpolation
+
+standardized.angular.velocity<- function(data,joint.a=NULL,joint.b=NULL, joint.c=NULL,time.int=((nrow(data)-1)*0.004/100)){
+  angular_velocity(data=(interpolate(data,joint.a,joint.b,joint.c)),joint1="Hip_Ang",joint2 = "Knee_Ang",joint3 = "Ankle_Ang",time.int = ((nrow(data)-1)*0.004/100))
+}
+
+stnd.ang.vel.ac1<-standardized.angular.velocity(ac1_1,"HIP_ANG","KNEE_ANG","ANKLE_ANG")
+
+```
+
+Repeat all the steps from unstandarized velocity to produce one large data frame (see full R script).
+
+```{r, echo=FALSE, warning=FALSE, results="hide"}
+# apply to all data sets 
+
+stnd.ang.vel.cc1<-standardized.angular.velocity(cc1_1,"HIP_ANG","KNEE_ANG","ANKLE_ANG")
+stnd.ang.vel.n2<-standardized.angular.velocity(n2_1,"HIP_ANG","KNEE_ANG","ANKLE_ANG")
+stnd.ang.vel.p2<-standardized.angular.velocity(p2_1,"HIP_ANG","KNEE_ANG","ANKLE_ANG")
+####make results of all individuals into a four data frames
+
+#AC1
+stnd.ang.vel.ac1<-as.data.frame(stnd.ang.vel.ac1, stringsAsFactors=FALSE) #as.data.frame so that different types of data can be in it
+percent<- seq(from=1,to=99)
+individual<- rep("ac1",length=nrow(stnd.ang.vel.ac1))
+Strain<- rep("control",length=nrow(stnd.ang.vel.ac1)) #use capital "S" because the object strain already exists in environment from earlier
+stnd.ang.vel.ac1<-cbind(percent,stnd.ang.vel.ac1,individual,Strain)
+
+
+#CC1
+stnd.ang.vel.cc1<-as.data.frame(stnd.ang.vel.cc1, stringsAsFactors=FALSE) #as.data.frame so that different types of data can be in it
+percent<- seq(from=1,to=99)
+individual<- rep("cc1",length=nrow(stnd.ang.vel.cc1))
+Strain<- rep("control",length=nrow(stnd.ang.vel.cc1)) #use capital "S" because the object strain already exists in environment from earlier
+stnd.ang.vel.cc1<-cbind(percent,stnd.ang.vel.cc1,individual,Strain)
+
+#N2
+stnd.ang.vel.n2<-as.data.frame(stnd.ang.vel.n2, stringsAsFactors=FALSE) #as.data.frame so that different types of data can be in it
+str(stnd.ang.vel.n2) 
+percent<- seq(from=1,to=99)
+individual<- rep("n2",length=nrow(stnd.ang.vel.n2))
+Strain<- rep("longshanks",length=nrow(stnd.ang.vel.n2)) #use capital "S" because the object strain already exists in environment from earlier
+stnd.ang.vel.n2<-cbind(percent,stnd.ang.vel.n2,individual,Strain)
+
+
+#P2
+stnd.ang.vel.p2<-as.data.frame(stnd.ang.vel.p2, stringsAsFactors=FALSE) #as.data.frame so that different types of data can be in it
+percent<- seq(from=1,to=99)
+individual<- rep("p2",length=nrow(stnd.ang.vel.p2))
+Strain<- rep("longshanks",length=nrow(stnd.ang.vel.p2)) #use capital "S" because the object strain already exists in environment from earlier
+stnd.ang.vel.p2<-cbind(percent,stnd.ang.vel.p2,individual,Strain)
+
+
+#join all together
+
+
+stnd.angular.velocity<- full_join(stnd.ang.vel.ac1,full_join(stnd.ang.vel.cc1,full_join(stnd.ang.vel.n2,stnd.ang.vel.p2)))
+
+```
+
+
+
+```{r}
+str(stnd.angular.velocity) 
+head(stnd.angular.velocity)
+```
+
+## Angular Acceleration 
+
+Since angular acceleration is the derivative of angular velocity, the angular_velocity() function can be easily tweaked to calculate angular acceleration using the equation:
+
+$$ a_{ang} = \frac  { v_{\theta 2} - v_{ \theta 1}} { \Delta t } $$
+
+See full R script for a complete treatment of angular acceleration, as it directly echoes the analytical procedure for angular velocity and will not be included in the tutorial.  
+
+```{r, eval=FALSE}
+
+function(data,joint1=NULL,joint2=NULL, joint3=NULL,time.int=0.004){
+  joints<-c(joint1,joint2,joint3)
+  ang_acc<-matrix(NA,nrow=nrow(data)-1,ncol=3,dimnames=list(NULL,c("Hip_Ang_Acc","Knee_Ang_Acc","Ankle_Ang_Acc")))
+  idnum<-0
+  for(j in joints){
+    if(!is.null(j)){
+      joint<-data[,j]
+      idnum<-idnum+1
+      for(i in 1:(nrow(data)-1)){
+        ang_acc[i,idnum]<-(joint[i+1]-joint[i])/time.int
+      }
+    }
+  }
+  return(ang_acc)
+}
+
+
+```
+
+***
+
+# **Visual Representation** 
+
+## Using linkR to produce an interactive jump sequence figure 
+
+
+Linkages are considered as a network of "links" or body elements such as a tibia or femur connected by joints (Figure 2). Each joint is able to permit a certain range of motions and their relative position is defined by a matrix of coordinates.
+
+Programs such as ProAnalyst do not produce high quality, aesthetic figures and the figures are not interactive. linkR will create a 3D interactive visualization of joints and linkages in scalable vector graphics (svg) format using six steps. As an extension for future analyses, linkR can also be used to produce animations of linkages. 
+
+1. __Joint coordinates__ : this is where the 3D coordinates of joints are defined within an object called joint.coords in order (metatarsal(x,y,z), ankle(x,y,z), knee(x,y,z), hip(x,y,z)), eye(x,y,z)). 
+
+To create Figures 3 and 4, the positions of five landmarks are repeated 4 times within the object (at time=0%, time=50%, time=75%, time=100%). For demonstration purposes the positions are translated so that y and z are switched to make it more intuitive to visualize. This will coerce the x axis to be a transverse section of the body, the y axis to be a sagittal section of the body, and the z axis to be a coronal section. 
+```{r, results="hide"}
+#step 1: Joint coords
+
+#make an object
+## make it by hand using using values
+##initial positions of joints
+ac1_1[1,]
+
+##position of joints at time=50%
+ac1_1[nrow(ac1_1)/2,]
+
+## position of joints at time=75%
+ac1_1[0.75*nrow(ac1_1),]
+
+##final position of joints 
+ac1_1[nrow(ac1_1),]
+
+joint.coor<-rbind(c(7.29,-0.23,3.15),c(6.87,-0.13,4.43),c(7.46,0.67,4.22),c(6.39,0.86,4.36),c(7.95,6.70,2.68),c(7.01,-0.26,2.67),c(6.71,0.11,4.09),c(8.16,0.66,4.19),c(7.12,1.25,3.70),c(8.43,8.78,2.16),c(7.34,0.08,3.62),c(7.47,1.04,3.84),c(8.97,2.64,3.96),c(8.33,3.38,3.11),c(9.24,11.5,1.87),c(9.35,4.48,0.92),c(9.30,5.13,1.99),c(10.26,6.47,1.05),c(9.82,6.95,2.35),c(10.58,14.81,0.91))
+
+## or make it using subsets 
+joint.coord<- rbind(c(ac1_1[1,"MT_X"],ac1_1[1,"MT_Z"],ac1_1[1,"MT_Y"]),
+                    c(ac1_1[1,"ANKLE_X"],ac1_1[1,"ANKLE_Z"],ac1_1[1,"ANKLE_Y"]),
+                    c(ac1_1[1,"KNEE_X"],ac1_1[1,"KNEE_Z"],ac1_1[1,"KNEE_Y"]),
+                    c(ac1_1[1,"HIP_X"],ac1_1[1,"HIP_Z"],ac1_1[1,"HIP_Y"]),
+                    c(ac1_1[1,"EYE_X"],ac1_1[1,"EYE_Z"],ac1_1[1,"EYE_Y"]),
+                    c(ac1_1[0.5*nrow(ac1_1),"MT_X"],ac1_1[0.5*nrow(ac1_1),"MT_Z"],ac1_1[0.5*nrow(ac1_1),"MT_Y"]),
+                    c(ac1_1[0.5*nrow(ac1_1),"ANKLE_X"],
+                      ac1_1[0.5*nrow(ac1_1),"ANKLE_Z"],ac1_1[0.5*nrow(ac1_1),"ANKLE_Y"]),
+                    c(ac1_1[0.5*nrow(ac1_1),"KNEE_X"],
+                      ac1_1[0.5*nrow(ac1_1),"KNEE_Z"],ac1_1[0.5*nrow(ac1_1),"KNEE_Y"]),
+                    c(ac1_1[0.5*nrow(ac1_1),"HIP_X"],
+                      ac1_1[0.5*nrow(ac1_1),"HIP_Z"],ac1_1[0.5*nrow(ac1_1),"HIP_Y"]),
+                    c(ac1_1[0.5*nrow(ac1_1),"EYE_X"],
+                      ac1_1[0.5*nrow(ac1_1),"EYE_Z"],ac1_1[0.5*nrow(ac1_1),"EYE_Y"]),
+                    c(ac1_1[0.75*nrow(ac1_1),"MT_X"],
+                      ac1_1[0.75*nrow(ac1_1),"MT_Z"],ac1_1[0.75*nrow(ac1_1),"MT_Y"]),
+                    c(ac1_1[0.75*nrow(ac1_1),"ANKLE_X"],
+                      ac1_1[0.75*nrow(ac1_1),"ANKLE_Z"],ac1_1[0.75*nrow(ac1_1),"ANKLE_Y"]),
+                    c(ac1_1[0.75*nrow(ac1_1),"KNEE_X"],
+                      ac1_1[0.75*nrow(ac1_1),"KNEE_Z"],ac1_1[0.75*nrow(ac1_1),"KNEE_Y"]),
+                    c(ac1_1[0.75*nrow(ac1_1),"HIP_X"],
+                      ac1_1[0.75*nrow(ac1_1),"HIP_Z"],ac1_1[0.75*nrow(ac1_1),"HIP_Y"]),
+                    c(ac1_1[0.75*nrow(ac1_1),"EYE_X"],
+                      ac1_1[0.75*nrow(ac1_1),"EYE_Z"],ac1_1[0.75*nrow(ac1_1),"EYE_Y"]),
+                    c(ac1_1[nrow(ac1_1),"MT_X"],ac1_1[nrow(ac1_1),"MT_Z"],ac1_1[nrow(ac1_1),"MT_Y"]),
+                    c(ac1_1[nrow(ac1_1),"ANKLE_X"],ac1_1[nrow(ac1_1),"ANKLE_Z"],ac1_1[nrow(ac1_1),"ANKLE_Y"]),
+                    c(ac1_1[nrow(ac1_1),"KNEE_X"],ac1_1[nrow(ac1_1),"KNEE_Z"],ac1_1[nrow(ac1_1),"KNEE_Y"]),
+                    c(ac1_1[nrow(ac1_1),"HIP_X"],ac1_1[nrow(ac1_1),"HIP_Z"],ac1_1[nrow(ac1_1),"HIP_Y"]),
+                    c(ac1_1[nrow(ac1_1),"EYE_X"],ac1_1[nrow(ac1_1),"EYE_Z"],ac1_1[nrow(ac1_1),"EYE_Y"]))
+
+
+
+```
+
+2. __Joint types__ : There are four possible joint types that must be defined using a vector in the same order as the joint coordinates.
+
+  * Linear (L): permits translation along a single vector
+  * Planar (P): permits translation within a plane
+  * Rotational (R): permits rotation along a single axis
+  * Spherical (S): permits rotation along all 3 axes. 
+
+These joint types can, but do not necessarily, mirror the biological terminology for the type of joint. For example, the femoral head/acetabulum junction at the hip is a 'ball in socket' joint with a spherical component, and it functions as a spherical joint in linkR. The knee and ankle act as a rotational joints in linkR, though they are commonly referred to as hinge joints. The remaining joints landmarked within the data set are considered spherical type in linkR because they have x, y, and z components of movement. 
+
+```{r}
+#step 2:joint types
+joint.types <- c("S", "R", "R", "S", "S","S", "R", "R", "S", "S","S", "R", "R", "S", "S","S", "R", "R", "S", "S")
+```
+
+3. __Joint constraints__ : Constraints are a description of the direction of motion permitted by a joint and are defined as a vector that is in the same order as the joint type vector. A linear joint is constrained by the line it moves along, a planar joint is constrained by the perpendicular vector to its action, and a rotational joint is constrained by the axis of rotion. Spherical joints permit motion in all directions and the constraint is set to NA.   
+```{r}
+
+
+#step 3: joint contraints 
+#use list() instead of cbind() because there are different types of data included
+#the only important contraint is about the hip joint 
+#1 in the z axis because hip and knee can't move independently in the z axis 
+joint.cons <- list(NA, c(0,0,1), c(0,0,1), NA, NA,NA, c(0,0,1), c(0,0,1), NA, NA,NA, c(0,0,1), c(0,0,1), NA, NA,NA, c(0,0,1), c(0,0,1), NA, NA) 
+
+```
+
+4. __Joint connections__ : Each joint can connect two links. The two links connected by a joint are specified in a two column matrix in which each column corresponds to a link and each row corresponds to a joint. Thus, the matrix should be in the same order and have the same number of rows as the joint coordinate matrix. The links in this example are defined as follows (Figure 2): 
+
+  * link 0 = "ground" 
+  * link 1,5,9,13 = foot
+  * link 2,6,10,14 = tibia and fibula
+  * link 3,7,11,15 = femur
+  * link 4,8,12,16 = "body"
+
+
+
+```{r}
+#step 4: Joint connections
+joint.conn<- rbind(c(0,1), c(1,2), c(2,3), c(3,4),c(4,0),c(0,5), c(5,6), c(6,7), c(7,8),c(8,0),c(0,9), c(9,10), c(10,11), c(11,12),c(12,0),c(0,13), c(13,14), c(14,15), c(15,16),c(16,0))
+
+
+```
+
+
+5. __Defining linkages__ : Using the defineLinkage() function make an object that assigns the objects from the previous four steps. 
+
+```{r}
+
+
+#step 5: define linkages using the "defineLinkage" function
+#basically plug in the names of objects that you made in previous 4 steps
+
+linkage<- defineLinkage(joint.coor = joint.coord, joint.types = joint.types, joint.cons = joint.cons, joint.conn = joint.conn)
+
+```
+
+6. __Drawing linkages__ : using the drawLinkage() function there are two methods to produce a stick figure plot, in 2D and in 3D respectively. 
+```{r, results="hide"}
+#step 6: visualize linkage using the "drawLinkage" function
+
+#if you change the method to 'plot' the function will print a 2D plot 
+#joint.cex=0 gets rid of joint points and looks nicer 
+drawLinkage(linkage, method=plot, joint.cex=0)
+
+```
+
+> Figure 3. A stick figure plot produced by linkR passing through to the base R plotting function showing a stick drawing of the body of a mouse in lateral view at time=0%, time=50%, time=75%, and time=100%. 
+
+
+```{r, message=FALSE, results="hide"}  
+
+
+drawLinkage(linkage, file='jumping sequence 2')
+#default method is an .html file saved to the working directory 
+
+
+
+```
+
+
+![](C:/Users/Owner/Desktop/RWizardry/Final Project/coordinatedata/jumpseq.png)
+
+> Figure 4. Output of linkR functions as viewed in a web browser using svgViewR showing a stick drawing of the body of a mouse in lateral view at time=0%, time=50%, time=75%, and time=100% 
+
+
+### svgViewR commands 
+
+Once the .html file produced by linkR that is saved in the working directory is opened in a browser, svgViewR takes over. Some helpful keyboard commands that svgViewR uses are: 
+
+* **'j'** zoom out
+* **'z'** zoom in 
+* **'r' + click + drag**  rotates figure 
+
+The .html figure 'jumping sequence' can be used for qualitative descriptions of the body position of the mouse through time. It is especially useful for descriptions of how joints are positioned relative to each other. In the case of the ac1 jump sequence (provided as an .html file), you can see that the knee joint flares out from the midline of the body (in a positive z direction) at times 50% and 75% prior to take-off and then comes in to be inline with the midline of the body post take-off at time 100%. 
+
+
+
+
+
+
+## Using ggplot2 to plot kinematic curves 
+
+The data being 'piped' to ggplot2 using dplyr has to be a data frame because ggplot2 doesn't know how to handle data as class matrix. The layer facet_grid(Strain~.) wraps into rows based on Strain, where facet_grid(~Strain) would wrap into columns.  
+
+The ggplot2 layer geom_smooth() uses a t-based approximation to calculate the standard error bounds, repesented by the grey shadow in Figures 5 and 6. The solid line represents the calculated mean. 
+
+Kinematic curves can be used to visually assess the timing of the peaks of the curves (keeping in mind the overall take-off time is longer in the control mice). 
+
+```{r, eval=FALSE}
+
+stnd.angular.velocity%>%
+  ggplot(data=.,aes(percent,y=Hip_Ang_Vel))+
+  facet_grid(Strain~.)+
+  labs(x="Percent of jump sequence", y="Angular velocity of hip (deg/s)")+
+  theme(legend.position = "bottom", legend.direction = "horizontal")+
+  geom_smooth(color="black")+
+  theme_minimal()
+
+```
+
+
+```{r, echo=FALSE, fig.width=3, fig.height=2.5, message=FALSE, results="hide"}
+
+#need angular.velocity to be a data frame because ggplot2 doesn't know how to handle data as class matrix
+##facet_grid(Strain~.) wraps into rows based on Strain, where facet_grid(~Strain) wraps into columns 
+###can visually assess the timing of the peaks of the curves (keeping in mind the overall takeoff time is longer in the control mice, and for future studies will be interpolated from 0-100% instead of by time in seconds)
+
+##angular velocity
+#hip
+angular.velocity%>%
+  ggplot(data=.,aes(time,y=Hip_Ang_Vel))+
+  facet_grid(Strain~.)+
+  labs(x="Time (s)", y="Angular velocity of hip (deg/s)")+
+  theme(legend.position = "bottom", legend.direction = "horizontal")+
+  geom_smooth(color="black")+
+  theme_minimal()
+
+#knee
+angular.velocity%>%
+  ggplot(data=.,aes(time,y=Knee_Ang_Vel))+
+  facet_grid(Strain~.)+
+  labs(x="Time (s)", y="Angular velocity of knee (deg/s)")+
+  theme(legend.position = "bottom", legend.direction = "horizontal")+
+  geom_smooth(color="black")+
+  theme_minimal()
+
+#ankle
+angular.velocity%>%
+  ggplot(data=.,aes(time,y=Ankle_Ang_Vel))+
+  facet_grid(Strain~.)+
+  labs(x="Time (s)", y="Angular velocity of ankle (deg/s)")+
+  theme(legend.position = "bottom", legend.direction = "horizontal")+
+  geom_smooth(color="black")+
+  theme_minimal()
+
+
+```
+
+> Figure 5. Unstandarized angular velocity through time for the hip, knee, and ankle. 
+
+In this figure, you can see the slight difference in the length of time between the control and LS mice. The higher variance around the mean in the control mice is shown in this figure, and reemphasized in Figure 9. 
+
+```{r, echo=FALSE, fig.width=3, fig.height=2.5, message=FALSE, results="hide"}
+
+## new angular velocity graphs 
+#hip
+
+stnd.angular.velocity%>%
+  ggplot(data=.,aes(percent,y=Hip_Ang_Vel))+
+  facet_grid(Strain~.)+
+  labs(x="Percent of jump sequence", y="Angular velocity of hip (deg/s)")+
+  theme(legend.position = "bottom", legend.direction = "horizontal")+
+  geom_smooth(color="black")+
+  theme_minimal()
+  
+#knee
+stnd.angular.velocity%>%
+  ggplot(data=.,aes(percent,y=Knee_Ang_Vel,color=Strain))+
+  labs(x="Percent of jump sequence", y="Angular velocity of knee (deg/s)")+
+  facet_grid(Strain~.)+
+  theme(legend.position = "bottom", legend.direction = "horizontal")+
+  geom_smooth(colour="black")+
+  theme_minimal()
+
+#Ankle
+stnd.angular.velocity%>%
+  ggplot(data=.,aes(percent,y=Ankle_Ang_Vel))+
+  labs(x="Percent of jump sequence", y="Angular velocity of ankle (deg/s)")+
+  facet_grid(Strain~.)+
+  theme(legend.position = "bottom", legend.direction = "horizontal")+
+  geom_smooth(colour="black")+
+  theme_minimal()
+
+```
+
+
+
+> Figure 6. Standarized angular velocity through time for the hip, knee, and ankle.
+
+The process of interpolation has reduced the variance around the mean for both groups compared to the unstandardized values in Figure 5, shown by the reduced grey shadow. 
+
+Take-off occurs at roughly 75% for all of the mice, so this figure shows that LS mice achieve their maximal angular velocity around all three joints up to 25% of the total jump sequence earlier than they leave the ground. By comparision, the control mice achieve their maximal angular velocity roughly before they take-off. 
+
+***
+
+# **Simple Statistical Analysis**
+
+As the sample size for this tutorial is very small (n=4), a very basic statisical summary will be used to compare the kinematic variables.  
+
+## Comparing take-off time by group
+
+Compare using t-test by using t.test() because there are only two groups: the controls and the longshanks. 
+
+The output of t.test() is a Welch's t-test which tests the null hypothesis that two groups have equal means. It is more accurate then other versions of the t-test when samples have unequal variances and unequal sample sizes [12].
+
+```{r,fig.width=4, fig.height=4}
+#use tilda because x is a binary factor and not a number. 
+boxplot(takeoff.times$times~takeoff.times$strain)
+
+```
+
+> Figure 7. Simple boxplot that shows the faster take-off time (in seconds) achieved by the LS mice and the higher variance in the controls. 
+
+```{r}
+t.test(takeoff.times$times~takeoff.times$strain)
+
+```
+
+The t-test results show the pattern in the boxplot is not statistically significant (p=0.2048). 
+
+
+## Comparing take-off velocity by group
+
+Again, a Welch's t-test is sufficient for comparision across the two groups. 
+
+```{r,echo=FALSE, fig.width=4, fig.height=4}
+#compare using t test t.test(y~x) use tilda because x is a binary factor and not a number
+#boxplot is hideous because there's only four data points, but the purpose of the technique is displayed
+boxplot(v.takeoffs$v.takeoff~v.takeoffs$strain)
+
+```
+
+> Figure 8. Simple boxplot that shows the slightly lower median resultant take off velocity of the LS mice, and the higher variability of the control take-off velocity 
+
+```{r, echo=FALSE, results="hide"}
+t.test(v.takeoffs$v.takeoff~v.takeoffs$strain)
+
+```
+
+The t-test shows the pattern in the boxplot is not statistically significant (p=0.8998). 
+
+
+
+## Comparing peaks of angular kinematic curves 
+
+The peaks of the kinematic curves (Figures 5 and 6) are the maximal angular velocity. In this comparison the unstandarized values are used because the process of interpolation changes the variance around the mean (Figures 5 and 6).  
+
+### Angular velocity
+
+
+```{r}
+max.ang.vel.hip<-c(max(ang_vel_ac1_1$Hip_Ang_Vel),max(ang_vel_cc1_1$Hip_Ang_Vel),max(ang_vel_n2_1$Hip_Ang_Vel),max(ang_vel_p2_1$Hip_Ang_Vel))
+max.ang.vel.knee<-c(max(ang_vel_ac1_1$Knee_Ang_Vel),max(ang_vel_cc1_1$Knee_Ang_Vel),max(ang_vel_n2_1$Knee_Ang_Vel),max(ang_vel_p2_1$Knee_Ang_Vel))
+max.ang.vel.ankle<-c(max(ang_vel_ac1_1$Ankle_Ang_Vel),max(ang_vel_cc1_1$Ankle_Ang_Vel),max(ang_vel_n2_1$Ankle_Ang_Vel),max(ang_vel_p2_1$Ankle_Ang_Vel))
+Strains<- c("control","control","longshanks","longshanks")
+
+max.vel.data<- data.frame(max.ang.vel.hip,max.ang.vel.knee,max.ang.vel.ankle,Strains)
+
+```
+
+```{r, eval=FALSE}
+
+boxplot(max.vel.data$max.ang.vel.hip~max.vel.data$Strains, main="hip angular velocity ")
+t.test(max.vel.data$max.ang.vel.hip~max.vel.data$Strains)
+
+#repeat for knee and ankle 
+
+```
+
+```{r}
+
+
+```
+
+```{r, fig.width=3, fig.height=3, echo=FALSE}
+
+#comparing hip
+
+boxplot(max.vel.data$max.ang.vel.hip~max.vel.data$Strains, main="hip angular velocity ")
+
+
+#comparing knee
+boxplot(max.vel.data$max.ang.vel.knee~max.vel.data$Strains, main= "knee angular velocity")
+
+
+
+#comparing ankle 
+boxplot(max.vel.data$max.ang.vel.ankle~max.vel.data$Strains, main= "ankle angular velocity")
+
+
+
+```
+
+> Figure 9. Simple boxplots showing the LS mice produce higher maximal angular velocity about the hip joint, lower maximal angular velocity about the knee, and lower maximal angular velocity about the ankle
+
+```{r, echo=FALSE, results="hide"}
+
+t.test(max.vel.data$max.ang.vel.hip~max.vel.data$Strains)
+t.test(max.vel.data$max.ang.vel.knee~max.vel.data$Strains)
+t.test(max.vel.data$max.ang.vel.ankle~max.vel.data$Strains)
+
+
+```
+
+The t.test results show that the difference in maximal angular velocity is not statistically significant for the hip, knee, or ankle (p=0.08006, 0.1003, 0.2516). 
+
+***
+
+# Conclusion 
+
+R enables the biomechanical researcher to complete all necessary analyses, visualizations, and statistics within a single script. The open source code means that all analyses are repeatable and available for scrutiny by subsequent researchers. This is superior to the expensive, closed source code programs currently available.  
+
+# **Session Info**
+
+
+```{r, echo=FALSE}
+sessionInfo()
+
+```
+
+# **Literature Cited**
+
+1. Günther MM, Ishida H, Kumakura  H, Nakano Y. 1991 The jump as a fast mode of locomotion in arboreal and terrestrial biotopes. Zeitschrift fur Morphologie und Anthropologie 78(3), 341-372.
+2. Roberts TJ, Marsh RL. 2003 Probing the limits to muscle-powered accelerations: lessons from jumping bullfrogs. Journal of Experimental Biology 206, 2567-2580.
+3. Harty TH, Roberts TJ. 2010 Jump energetics and elastic mechanisms in the pacific jumping mouse (Zapus trinotatus). In The Role of the Vertebral Column During Quadrupedal Jumping (Doctoral Dissertation),pp. 4-18. Oregon State University. 
+4. Biewener AA. 2009 Biomechanics of mammalian terrestrial locomotion. Science 250, 1097-1103. 
+5. Gabriel JM. 2009 The effect of animal design on jumping performance. Journal of Zoology 204(4), 533-539.
+6. Christiansen P. 1999 Scaling of the limb long bones to body mass in terrestrial mammals. Journal of Morphology 239(2),167-190.
+7. Burt DB. 2001 Evolutionary stasis, constraint and other terminology describing evolutionary patterns. Biological Journal of the Linnaean Society 72(4), 509-517.
+8. Alexander RMN. 1995 Leg design and jumping technique for humans, other vertebrates and insects. Philosophical Transactions of the Royal Society of London B 347, 235-248.
+9. Reilly SM, McElroy EJ, Biknevicus AR. 2007 Posture, gait and the ecological relevance of locomotor costs and energy-saving mechanisms in tetrapods. Zoology 110(4), 271-289.  
+10. Marchini M, Sparrow L, Cosman M, Dowhanik A, Krueger A, Hallgrimsson B, Rolian CP. 2014 Impacts of genetic correlation on the independent evolution of body mass and skeletal size in mammals. BMC Evolutionary Biology 14, 258-273
+11. Teodorescu PP. 2007 Kinematics. Mechanical Systems, Classical Models: Particle Mechanics. Springer. p. 287.
+12. Ruxton, GD. 2006 The unequal variance t-test is an underused alternative to Student's t-test and the Mann-Whitney U test. Behavioral Ecology 17: 688-690.
+
+
+# *Appendix: Full R Script*
+
+
+```{r, eval=FALSE}
+
+
+#start session by clearing the clearing the environment 
+rm(list=ls(all=TRUE))
+#check the current working directory
+getwd()
+#set the working directory to where the data sets are saved
+setwd("C:/Users/Owner/Desktop/RWizardry/Final Project/coordinatedata")
+
+#load the packages we'll be using so that they're ready
+library(ggplot2)
+library(dplyr)
+library(linkR)
+library(svgViewR)
+
+##data sets are produced as an excel file from ProAnalyst
+##data sets were cropped from initiation of jumping behavior set to time=0 to 5 frames post take-off
+##data sets then saved as a .csv (comma deliminated) text file because it's a file type that R can handle  
+
+#input the datasets using the "read.csv" function. header is true because the first row is column names, check.names is false because names I don't want R to change them
+##copy address of files from file explorer 
+##for the purposes of this exercise, let's input one jump each from four individuals, two from the control strain and two from the longshanks strain 
+
+#Control Strain 
+
+###Data for individual AC1
+####jump 1, height = 15cm
+ac1_1<-read.csv("file:///C:/Users/Owner/Desktop/RWizardry/Final Project/coordinatedata/AC_1_standardizeddata_seq1_15cm.csv", header=TRUE, check.names = FALSE)
+
+###Data for individual CC1
+####jump 1, height = 15cm
+cc1_1<-read.csv("file:///C:/Users/Owner/Desktop/RWizardry/Final Project/coordinatedata/CC_1_standardizeddata_seq1_15cm.csv",header=TRUE, check.names = FALSE)
+
+#Longshanks line 2 strain
+
+###Data for individual P2
+####jump 1, height = 15cm
+p2_1<-read.csv("file:///C:/Users/Owner/Desktop/RWizardry/Final Project/coordinatedata/P2_1_standardizeddata_seq1_15cm.csv",header=TRUE, check.names = FALSE)
+
+###Data for individual N2
+####jump 1, height = 15cm
+
+n2_1<-read.csv("file:///C:/Users/Owner/Desktop/RWizardry/Final Project/coordinatedata/P2_1_standardizeddata_seq1_15cm.csv",header=TRUE, check.names = FALSE)
+
+#inquire about data sets structure 
+#inqure about column names
+#all sets are formatted the same, so can just do one data set for an example
+
+str(ac1_1)
+colnames(ac1_1)
+
+#Start analysis of motion
+
+##take-off time in seconds 
+##basically, simple calculation to see how long it takes the mouse to leave the ground after initiating the behaviour
+#film data taken at 250 frames per second so we can calculate the time interval and store it as an object.
+
+time.int<-1/250
+time.int
+
+##can just calculate for each data set
+(nrow(ac1_1)-5)*time.int
+##but, the more typing the more mistakes so let's make a simple function to calculate this for us 
+##use same equation as above, but make it generalized (i.e remove the specific names of the data sets and replace with a function parameter)
+##could make this funciton more flexible and allow for a time interval parameter, but it's not necessary because all are taken at 250 fps
+takeoff.time<- function(data){
+  (nrow(data)-5)*time.int
+}
+
+#now let's calculate take off time for all of the individuals
+##store times an object, store individual names, and store strain so that they can easily be bound into a data frame
+times<-c(takeoff.time(ac1_1),takeoff.time(cc1_1),takeoff.time(n2_1),takeoff.time(p2_1))
+indiv<-c("ac1","cc1","n2","p2")
+strain<-as.factor(c("control","control","longshanks","longshanks"))
+
+#use data.frame instead of cbind to make sure that the original types of data (i.e. numeric for the time and character otherwise) are maintained
+takeoff.times<-data.frame(times,indiv,strain)
+str(takeoff.times)
+
+#compare using t test t.test(y~x) use tilda because x is a binary factor and not a number
+#boxplot is hideous because there's only four data points, but the purpose of the technique is displayed
+boxplot(takeoff.times$times~takeoff.times$strain)
+t.test(takeoff.times$times~takeoff.times$strain)
+
+#takeoff velocity is the instaneous velocity as the mouse leaves the ground. This is calculated as the difference in position vector between the final time interval and the immediately preceeding time interval
+#in cm/s
+#there are always 5 frames after takeoff 
+#using the hip landmark because it is a part of the main body (could also use eye)
+#the formula that this is using is: (((x2-x1)^2+(y2-y1)^2+(z2-z1)^2)^0.5)/delta time
+
+((((ac1_1[(nrow(ac1_1)-6),"HIP_X"]-ac1_1[(nrow(ac1_1)-5),"HIP_X"])^2)+((ac1_1[(nrow(ac1_1)-6),"HIP_Y"]-ac1_1[(nrow(ac1_1)-5),"HIP_Y"])^2)+((ac1_1[(nrow(ac1_1)-6),"HIP_Z"]-ac1_1[(nrow(ac1_1)-5),"HIP_Z"])^2))^0.5)/time.int
+
+#this is a ton of typing so let's make a function to do the job for the rest of the data sets
+#they all have the same column names by default of the proanalyst output so we can make a function that only needs to take in the name of the data set. this function could be made more flexible to include parameters for the x2,x1, y2,y1,z2,z1
+
+takeoff.velocity<- function(data){
+  ((((data[(nrow(data)-6),"HIP_X"]-data[(nrow(data)-5),"HIP_X"])^2)+((data[(nrow(data)-6),"HIP_Y"]-data[(nrow(data)-5),"HIP_Y"])^2)+((data[(nrow(data)-6),"HIP_Z"]-data[(nrow(data)-5),"HIP_Z"])^2))^0.5)/time.int
+}
+ 
+takeoff.velocity(ac1_1)
+
+##flexible version of the function that allows full flexibility of parameters and allows for 2D analysis as well
+
+takeoff.velocity.flex<- function(data,x,y,z=NULL,dtime){
+  ((((data[(nrow(data)-6),x]-data[(nrow(data)-5),x])^2)+((data[(nrow(data)-6),y]-data[(nrow(data)-5),y])^2)+((data[(nrow(data)-6),z]-data[(nrow(data)-5),z])^2))^0.5)/dtime
+}
+
+takeoff.velocity.flex(ac1_1,"HIP_X","HIP_Y","HIP_Z",time.int)
+
+#let's make a data frame for takeoff velocity like we did for takeoff time
+v.takeoff<-c(takeoff.velocity(ac1_1),takeoff.velocity(cc1_1),takeoff.velocity(n2_1),takeoff.velocity(p2_1))
+indiv<-c("ac1","cc1","n2","p2")
+strain<-as.factor(c("control","control","longshanks","longshanks"))
+
+#use data.frame instead of cbind to make sure that the original types of data (i.e. numeric for the time and character otherwise) are maintained
+v.takeoffs<-data.frame(v.takeoff,indiv,strain)
+str(v.takeoffs)
+
+#compare using t test t.test(y~x) use tilda because x is a binary factor and not a number
+#boxplot is hideous because there's only four data points, but the purpose of the technique is displayed
+boxplot(v.takeoffs$v.takeoff~v.takeoffs$strain)
+t.test(v.takeoffs$v.takeoff~v.takeoffs$strain)
+
+########angular velocity for loop and function 
+##time interval of 0.004 is set as a default but can be changed if need be 
+
+angular_velocity<- function(data,joint1=NULL,joint2=NULL, joint3=NULL,time.int=0.004){
+  joints<-c(joint1,joint2,joint3)
+  ang_vel<-matrix(NA,nrow=nrow(data)-1,ncol=3,dimnames=list( NULL,c("Hip_Ang_Vel","Knee_Ang_Vel","Ankle_Ang_Vel")))
+  idnum<-0
+  for(j in joints){
+    if(!is.null(j)){
+      joint<-data[,j]
+      idnum<-idnum+1
+      for(i in 1:(nrow(data)-1)){
+        ang_vel[i,idnum]<-(joint[i+1]-joint[i])/time.int
+      }
+    }
+  }
+  print(ang_vel)
+}
+
+ang_vel_ac1_1<-angular_velocity(data=ac1_1,joint1="HIP_ANG",joint2 = "KNEE_ANG",joint3 = "ANKLE_ANG")
+ang_vel_cc1_1<-angular_velocity(data=cc1_1,joint1="HIP_ANG",joint2 = "KNEE_ANG",joint3 = "ANKLE_ANG")
+ang_vel_n2_1<-angular_velocity(data=n2_1,joint1="HIP_ANG",joint2 = "KNEE_ANG",joint3 = "ANKLE_ANG")
+ang_vel_p2_1<-angular_velocity(data=p2_1,joint1="HIP_ANG",joint2 = "KNEE_ANG",joint3 = "ANKLE_ANG")
+
+####make results of all individuals into a four data frames
+
+#AC1
+ang_vel_ac1_1<-as.data.frame(ang_vel_ac1_1, stringsAsFactors=FALSE) #as.data.frame so that different types of data can be in it
+str(ang_vel_ac1_1) 
+time<- seq(from=0.004,to=0.004*nrow(ang_vel_ac1_1),by=0.004)
+individual<- rep("ac1",length=nrow(ang_vel_ac1_1))
+Strain<- rep("control",length=nrow(ang_vel_ac1_1)) #use capital "S" because the object strain already exists in environment from earlier
+ang_vel_ac1_1<-cbind(time,ang_vel_ac1_1,individual,Strain)
+str(ang_vel_ac1_1)
+
+#CC1
+ang_vel_cc1_1<-as.data.frame(ang_vel_cc1_1, stringsAsFactors=FALSE) #as.data.frame so that different types of data can be in it
+str(ang_vel_cc1_1)
+time<- seq(from=0.004,to=0.004*nrow(ang_vel_cc1_1),by=0.004)
+individual<- rep("cc1",length=nrow(ang_vel_cc1_1))
+Strain<- rep("control",length=nrow(ang_vel_cc1_1))
+ang_vel_cc1_1<-cbind(time,ang_vel_cc1_1,individual,Strain)
+str(ang_vel_cc1_1)
+
+#N2
+ang_vel_n2_1<-as.data.frame(ang_vel_n2_1, stringsAsFactors=FALSE) #as.data.frame so that different types of data can be in it
+str(ang_vel_n2_1)
+time<- seq(from=0.004,to=0.004*nrow(ang_vel_n2_1),by=0.004)
+individual<- rep("n2",length=nrow(ang_vel_n2_1))
+Strain<- rep("longshanks",length=nrow(ang_vel_n2_1))
+ang_vel_n2_1<-cbind(time,ang_vel_n2_1,individual,Strain)
+str(ang_vel_n2_1)
+
+#P2
+ang_vel_p2_1<-as.data.frame(ang_vel_p2_1, stringsAsFactors=FALSE) #as.data.frame so that different types of data can be in it
+str(ang_vel_p2_1)
+time<- seq(from=0.004,to=0.004*nrow(ang_vel_p2_1),by=0.004)
+individual<- rep("p2",length=nrow(ang_vel_p2_1))
+Strain<- rep("longshanks",length=nrow(ang_vel_p2_1))
+ang_vel_p2_1<-cbind(time,ang_vel_p2_1,individual,Strain)
+str(ang_vel_p2_1)
+
+##join into one giant data set using dplyr
+angular.velocity<- full_join(ang_vel_ac1_1,full_join(ang_vel_cc1_1,full_join(ang_vel_n2_1,ang_vel_p2_1))) #warning message comes up so check structure
+str(angular.velocity) #everything looks ok 
+
+######angular acceleration for loop and function 
+##time interval of 0.004 is set as a default but can be changed if need be 
+
+angular_acceleration<- function(data,joint1=NULL,joint2=NULL, joint3=NULL,time.int=0.004){
+  joints<-c(joint1,joint2,joint3)
+  ang_acc<-matrix(NA,nrow=nrow(data)-1,ncol=3,dimnames=list(NULL,c("Hip_Ang_Acc","Knee_Ang_Acc","Ankle_Ang_Acc")))
+  idnum<-0
+  for(j in joints){
+    if(!is.null(j)){
+      joint<-data[,j]
+      idnum<-idnum+1
+      for(i in 1:(nrow(data)-1)){
+        ang_acc[i,idnum]<-(joint[i+1]-joint[i])/time.int
+      }
+    }
+  }
+  print(ang_acc)
+}
+
+ang_acc_ac1_1<-angular_acceleration(data=ang_vel_ac1_1,joint1="Hip_Ang_Vel",joint2 = "Knee_Ang_Vel",joint3 = "Ankle_Ang_Vel")
+ang_acc_cc1_1<-angular_acceleration(data=ang_vel_cc1_1,joint1="Hip_Ang_Vel",joint2 = "Knee_Ang_Vel",joint3 = "Ankle_Ang_Vel")
+ang_acc_n2_1<-angular_acceleration(data=ang_vel_n2_1,joint1="Hip_Ang_Vel",joint2 = "Knee_Ang_Vel",joint3 = "Ankle_Ang_Vel")
+ang_acc_p2_1<-angular_acceleration(data=ang_vel_p2_1,joint1="Hip_Ang_Vel",joint2 = "Knee_Ang_Vel",joint3 = "Ankle_Ang_Vel")
+
+####make results of all individuals into a four data frames
+
+#AC1
+ang_acc_ac1_1<-as.data.frame(ang_acc_ac1_1, stringsAsFactors=FALSE) #as.data.frame so that different types of data can be in it
+str(ang_acc_ac1_1) 
+Time<- seq(from=0.004,to=0.004*nrow(ang_acc_ac1_1),by=0.004)
+individual<- rep("ac1",length=nrow(ang_acc_ac1_1))
+Strain<- rep("control",length=nrow(ang_acc_ac1_1)) #use capital "S" because the object strain already exists in environment from earlier
+ang_acc_ac1_1<-cbind(Time,ang_acc_ac1_1,individual,Strain)
+str(ang_acc_ac1_1)
+
+#CC1
+ang_acc_cc1_1<-as.data.frame(ang_acc_cc1_1, stringsAsFactors=FALSE) #as.data.frame so that different types of data can be in it
+str(ang_acc_cc1_1)
+Time<- seq(from=0.004,to=0.004*nrow(ang_acc_cc1_1),by=0.004)
+individual<- rep("cc1",length=nrow(ang_acc_cc1_1))
+Strain<- rep("control",length=nrow(ang_acc_cc1_1))
+ang_acc_cc1_1<-cbind(Time,ang_acc_cc1_1,individual,Strain)
+str(ang_acc_cc1_1)
+
+#N2
+ang_acc_n2_1<-as.data.frame(ang_acc_n2_1, stringsAsFactors=FALSE) #as.data.frame so that different types of data can be in it
+str(ang_acc_n2_1)
+Time<- seq(from=0.004,to=0.004*nrow(ang_acc_n2_1),by=0.004)
+individual<- rep("n2",length=nrow(ang_acc_n2_1))
+Strain<- rep("longshanks",length=nrow(ang_acc_n2_1))
+ang_acc_n2_1<-cbind(Time,ang_acc_n2_1,individual,Strain)
+str(ang_acc_n2_1)
+
+#P2
+ang_acc_p2_1<-as.data.frame(ang_acc_p2_1, stringsAsFactors=FALSE) #as.data.frame so that different types of data can be in it
+str(ang_acc_p2_1)
+Time<- seq(from=0.004,to=0.004*nrow(ang_acc_p2_1),by=0.004)
+individual<- rep("p2",length=nrow(ang_acc_p2_1))
+Strain<- rep("longshanks",length=nrow(ang_acc_p2_1))
+ang_acc_p2_1<-cbind(Time,ang_acc_p2_1,individual,Strain)
+str(ang_acc_p2_1)
+
+##join into one giant data set using dplyr
+angular.acceleration<- ang_acc_ac1_1%>%full_join(ang_acc_cc1_1)%>%full_join(ang_acc_n2_1)%>%full_join(ang_acc_p2_1) #warning message comes up so check structure
+str(angular.acceleration) #everything looks ok 
+
+
+
+##angular acceleration
+#hip
+angular.acceleration%>%
+  ggplot(data=.,aes(time,y=Hip_Ang_Acc))+
+  facet_grid(Strain~.)+
+  labs(x="Time (s)", y="Angular acceleration of hip (deg/s^2)")+
+  theme(legend.position = "bottom", legend.direction = "horizontal")+
+  geom_smooth()
+
+#knee
+angular.acceleration%>%
+  ggplot(data=.,aes(time,y=Knee_Ang_Acc))+
+  facet_grid(Strain~.)+
+  labs(x="Time (s)", y="Angular acceleration of knee (deg/s^2)")+
+  theme(legend.position = "bottom", legend.direction = "horizontal")+
+  geom_smooth()
+
+#ankle
+angular.acceleration%>%
+  ggplot(data=.,aes(time,y=Ankle_Ang_Acc))+
+  facet_grid(Strain~.)+
+  labs(x="Time (s)", y="Angular acceleration of ankle (deg/s^2)")+
+  theme(legend.position = "bottom", legend.direction = "horizontal")+
+  geom_smooth()
+
+####using approx() function to interpolate from 0 to 100 %
+
+
+approx(seq_along(ac1_1[,"HIP_ANG"]),ac1_1[,"HIP_ANG"],n=100)
+
+##approx() function gives an $x and $y output, where $x is the position along the sequence and $y is the output we want 
+
+interpolate<- function(data,joint1=NULL,joint2=NULL, joint3=NULL){
+  joints<-c(joint1,joint2,joint3)
+  inter<-matrix(NA,nrow=100,ncol=3,dimnames=list(NULL,c("Hip_Ang","Knee_Ang","Ankle_Ang")))
+  idnum<-0
+  for(j in joints){
+    if(!is.null(j)){
+      joint<-data[,j]
+      idnum<-idnum+1
+      inter[,idnum]<-approx(seq_along(joint),joint,n=100)$y
+    }
+  }
+  print(inter)
+}
+
+int.ac1_1<-interpolate(ac1_1,"HIP_ANG","KNEE_ANG","ANKLE_ANG")
+
+ang_vel_ac1_1<-angular_velocity(data=ac1_1,joint1="HIP_ANG",joint2 = "KNEE_ANG",joint3 = "ANKLE_ANG")
+ 
+# time interval needs to change because of the interpolation
+
+int.ang_vel_ac1_1<-angular_velocity(data=int.ac1_1,joint1="Hip_Ang",joint2 = "Knee_Ang",joint3 = "Ankle_Ang",time.int = ((nrow(ac1_1)-1)*0.004/100))
+
+##to save ourselves some trouble, let's combine the angular_velocity() and interpolate() functions into a standardized.angular.velocity() function 
+
+standardized.angular.velocity<- function(data,joint.a=NULL,joint.b=NULL, joint.c=NULL,time.int=((nrow(data)-1)*0.004/100)){
+  angular_velocity(data=(interpolate(data,joint.a,joint.b,joint.c)),joint1="Hip_Ang",joint2 = "Knee_Ang",joint3 = "Ankle_Ang",time.int = ((nrow(data)-1)*0.004/100))
+}
+
+stnd.ang.vel.ac1<-standardized.angular.velocity(ac1_1,"HIP_ANG","KNEE_ANG","ANKLE_ANG")
+stnd.ang.vel.cc1<-standardized.angular.velocity(cc1_1,"HIP_ANG","KNEE_ANG","ANKLE_ANG")
+stnd.ang.vel.n2<-standardized.angular.velocity(n2_1,"HIP_ANG","KNEE_ANG","ANKLE_ANG")
+stnd.ang.vel.p2<-standardized.angular.velocity(p2_1,"HIP_ANG","KNEE_ANG","ANKLE_ANG")
+
+####make results of all individuals into a four data frames
+
+#AC1
+stnd.ang.vel.ac1<-as.data.frame(stnd.ang.vel.ac1, stringsAsFactors=FALSE) #as.data.frame so that different types of data can be in it
+str(stnd.ang.vel.ac1) 
+percent<- seq(from=1,to=99)
+individual<- rep("ac1",length=nrow(stnd.ang.vel.ac1))
+Strain<- rep("control",length=nrow(stnd.ang.vel.ac1)) #use capital "S" because the object strain already exists in environment from earlier
+stnd.ang.vel.ac1<-cbind(percent,stnd.ang.vel.ac1,individual,Strain)
+str(stnd.ang.vel.ac1)
+
+#CC1
+stnd.ang.vel.cc1<-as.data.frame(stnd.ang.vel.cc1, stringsAsFactors=FALSE) #as.data.frame so that different types of data can be in it
+str(stnd.ang.vel.cc1) 
+percent<- seq(from=1,to=99)
+individual<- rep("cc1",length=nrow(stnd.ang.vel.cc1))
+Strain<- rep("control",length=nrow(stnd.ang.vel.cc1)) #use capital "S" because the object strain already exists in environment from earlier
+stnd.ang.vel.cc1<-cbind(percent,stnd.ang.vel.cc1,individual,Strain)
+str(stnd.ang.vel.cc1)
+
+#N2
+stnd.ang.vel.n2<-as.data.frame(stnd.ang.vel.n2, stringsAsFactors=FALSE) #as.data.frame so that different types of data can be in it
+str(stnd.ang.vel.n2) 
+percent<- seq(from=1,to=99)
+individual<- rep("n2",length=nrow(stnd.ang.vel.n2))
+Strain<- rep("longshanks",length=nrow(stnd.ang.vel.n2)) #use capital "S" because the object strain already exists in environment from earlier
+stnd.ang.vel.n2<-cbind(percent,stnd.ang.vel.n2,individual,Strain)
+str(stnd.ang.vel.n2)
+
+#P2
+stnd.ang.vel.p2<-as.data.frame(stnd.ang.vel.p2, stringsAsFactors=FALSE) #as.data.frame so that different types of data can be in it
+str(stnd.ang.vel.p2) 
+percent<- seq(from=1,to=99)
+individual<- rep("p2",length=nrow(stnd.ang.vel.p2))
+Strain<- rep("longshanks",length=nrow(stnd.ang.vel.p2)) #use capital "S" because the object strain already exists in environment from earlier
+stnd.ang.vel.p2<-cbind(percent,stnd.ang.vel.p2,individual,Strain)
+str(stnd.ang.vel.p2)
+
+#join all together
+
+stnd.angular.velocity<- full_join(stnd.ang.vel.ac1,full_join(stnd.ang.vel.cc1,full_join(stnd.ang.vel.n2,stnd.ang.vel.p2)))#warning message comes up so check structure
+str(stnd.angular.velocity) 
+
+
+
+
+###statistically comparing maximums of the peaks of the angular velocity and angular acceleration curves 
+max.ang.vel.hip<-c(max(ang_vel_ac1_1$Hip_Ang_Vel),max(ang_vel_cc1_1$Hip_Ang_Vel),max(ang_vel_n2_1$Hip_Ang_Vel),max(ang_vel_p2_1$Hip_Ang_Vel))
+max.ang.vel.knee<-c(max(ang_vel_ac1_1$Knee_Ang_Vel),max(ang_vel_cc1_1$Knee_Ang_Vel),max(ang_vel_n2_1$Knee_Ang_Vel),max(ang_vel_p2_1$Knee_Ang_Vel))
+max.ang.vel.ankle<-c(max(ang_vel_ac1_1$Ankle_Ang_Vel),max(ang_vel_cc1_1$Ankle_Ang_Vel),max(ang_vel_n2_1$Ankle_Ang_Vel),max(ang_vel_p2_1$Ankle_Ang_Vel))
+Strains<- c("control","control","longshanks","longshanks")
+
+max.vel.data<- data.frame(max.ang.vel.hip,max.ang.vel.knee,max.ang.vel.ankle,Strains)
+
+#comparing hip
+boxplot(max.vel.data$max.ang.vel.hip~max.vel.data$Strains)
+t.test(max.vel.data$max.ang.vel.hip~max.vel.data$Strains)
+
+#comparing knee
+boxplot(max.vel.data$max.ang.vel.knee~max.vel.data$Strains)
+t.test(max.vel.data$max.ang.vel.knee~max.vel.data$Strains)
+
+#comparing ankle 
+boxplot(max.vel.data$max.ang.vel.ankle~max.vel.data$Strains)
+t.test(max.vel.data$max.ang.vel.ankle~max.vel.data$Strains)
+
+####LINKR CODE
+
+#Creates 3D animated, interactive visualizations in Scalable Vector Graphics (SVG) format that can be viewed in a web browser.
+
+#step 1: Joint coords
+##need initial positions of joints
+print(ac1_1[1,])
+
+#middle position of joints
+print(ac1_1[nrow(ac1_1)/2,])
+
+#3/4 position of joints
+print(ac1_1[0.75*nrow(ac1_1),])
+
+#final position of joints 
+print(ac1_1[nrow(ac1_1),])
+
+#make an object with initial positions
+#joint.coords<- (metatarsal(x,y,z), ankle(x,y,z), knee(x,y,z), hip(x,y,z)), eye(x,y,z))
+#joint.coor<-rbind(c(7.29,3.15,-0.23),c(6.87,4.43,-0.13),c(7.46,4.22,0.67),c(6.39,4.36,0.86),c(7.95,2.68,6.70)) #round to second decimalfor demo purposes
+#translate so that y and z are switched to make it more intuitive to visualize (this way the x axis is a transverse section of the body, y axis is a sagittal section of the body, and z axis is a coronal section)
+joint.coor<-rbind(c(7.29,-0.23,3.15),c(6.87,-0.13,4.43),c(7.46,0.67,4.22),c(6.39,0.86,4.36),c(7.95,6.70,2.68),c(7.01,-0.26,2.67),c(6.71,0.11,4.09),c(8.16,0.66,4.19),c(7.12,1.25,3.70),c(8.43,8.78,2.16),c(7.34,0.08,3.62),c(7.47,1.04,3.84),c(8.97,2.64,3.96),c(8.33,3.38,3.11),c(9.24,11.5,1.87),c(9.35,4.48,0.92),c(9.30,5.13,1.99),c(10.26,6.47,1.05),c(9.82,6.95,2.35),c(10.58,14.81,0.91))
+## or make it using subsets 
+joint.coord<- rbind(c(ac1_1[1,"MT_X"],ac1_1[1,"MT_Z"],ac1_1[1,"MT_Y"]),
+                    c(ac1_1[1,"ANKLE_X"],ac1_1[1,"ANKLE_Z"],ac1_1[1,"ANKLE_Y"]),
+                    c(ac1_1[1,"KNEE_X"],ac1_1[1,"KNEE_Z"],ac1_1[1,"KNEE_Y"]),
+                    c(ac1_1[1,"HIP_X"],ac1_1[1,"HIP_Z"],ac1_1[1,"HIP_Y"]),
+                    c(ac1_1[1,"EYE_X"],ac1_1[1,"EYE_Z"],ac1_1[1,"EYE_Y"]),
+                    c(ac1_1[0.5*nrow(ac1_1),"MT_X"],ac1_1[0.5*nrow(ac1_1),"MT_Z"],ac1_1[0.5*nrow(ac1_1),"MT_Y"]),
+                    c(ac1_1[0.5*nrow(ac1_1),"ANKLE_X"],ac1_1[0.5*nrow(ac1_1),"ANKLE_Z"],ac1_1[0.5*nrow(ac1_1),"ANKLE_Y"]),
+                    c(ac1_1[0.5*nrow(ac1_1),"KNEE_X"],ac1_1[0.5*nrow(ac1_1),"KNEE_Z"],ac1_1[0.5*nrow(ac1_1),"KNEE_Y"]),
+                    c(ac1_1[0.5*nrow(ac1_1),"HIP_X"],ac1_1[0.5*nrow(ac1_1),"HIP_Z"],ac1_1[0.5*nrow(ac1_1),"HIP_Y"]),
+                    c(ac1_1[0.5*nrow(ac1_1),"EYE_X"],ac1_1[0.5*nrow(ac1_1),"EYE_Z"],ac1_1[0.5*nrow(ac1_1),"EYE_Y"]),
+                    c(ac1_1[0.75*nrow(ac1_1),"MT_X"],ac1_1[0.75*nrow(ac1_1),"MT_Z"],ac1_1[0.75*nrow(ac1_1),"MT_Y"]),
+                    c(ac1_1[0.75*nrow(ac1_1),"ANKLE_X"],ac1_1[0.75*nrow(ac1_1),"ANKLE_Z"],ac1_1[0.75*nrow(ac1_1),"ANKLE_Y"]),
+                    c(ac1_1[0.75*nrow(ac1_1),"KNEE_X"],ac1_1[0.75*nrow(ac1_1),"KNEE_Z"],ac1_1[0.75*nrow(ac1_1),"KNEE_Y"]),
+                    c(ac1_1[0.75*nrow(ac1_1),"HIP_X"],ac1_1[0.75*nrow(ac1_1),"HIP_Z"],ac1_1[0.75*nrow(ac1_1),"HIP_Y"]),
+                    c(ac1_1[0.75*nrow(ac1_1),"EYE_X"],ac1_1[0.75*nrow(ac1_1),"EYE_Z"],ac1_1[0.75*nrow(ac1_1),"EYE_Y"]),
+                    c(ac1_1[nrow(ac1_1),"MT_X"],ac1_1[nrow(ac1_1),"MT_Z"],ac1_1[nrow(ac1_1),"MT_Y"]),
+                    c(ac1_1[nrow(ac1_1),"ANKLE_X"],ac1_1[nrow(ac1_1),"ANKLE_Z"],ac1_1[nrow(ac1_1),"ANKLE_Y"]),
+                    c(ac1_1[nrow(ac1_1),"KNEE_X"],ac1_1[nrow(ac1_1),"KNEE_Z"],ac1_1[nrow(ac1_1),"KNEE_Y"]),
+                    c(ac1_1[nrow(ac1_1),"HIP_X"],ac1_1[nrow(ac1_1),"HIP_Z"],ac1_1[nrow(ac1_1),"HIP_Y"]),
+                    c(ac1_1[nrow(ac1_1),"EYE_X"],ac1_1[nrow(ac1_1),"EYE_Z"],ac1_1[nrow(ac1_1),"EYE_Y"]))
+
+
+#step 2:joint types
+joint.types <- c("S", "S", "S", "R", "S","S", "S", "S", "R", "S","S", "S", "S", "R", "S","S", "S", "S", "R", "S") #the only important contraint is about the hip joint 
+
+#step 3: joint contraints 
+# Define joint constraints
+joint.cons <- list(NA, NA, NA, c(1,0,-1), NA,NA, NA, NA, c(1,0,-1), NA,NA, NA, NA, c(1,0,-1), NA,NA, NA, NA, c(1,0,-1), NA) # constraint is a vector perpendiciular to the plane of movement 
+
+#step 4: Joint connections
+
+##link 0= "ground" 
+##link 1,5,9,13= foot
+##link 2,6,10,14= tibia and fibula
+##link 3,7,11,15= femur
+##link 4,8,12,16= "body"
+
+
+joint.conn<- rbind(c(0,1), c(1,2), c(2,3), c(3,4),c(4,0),c(0,5), c(5,6), c(6,7), c(7,8),c(8,0),c(0,9), c(9,10), c(10,11), c(11,12),c(12,0),c(0,13), c(13,14), c(14,15), c(15,16),c(16,0))
+
+
+#step 5: define linkages using the "defineLinkage" function
+
+#make an object with linkage definitions 
+#basically plug in the names of objects that you made in previous 4 steps
+?defineLinkage
+
+linkage<- defineLinkage(joint.coor = joint.coor, joint.types = joint.types, joint.cons = joint.cons, joint.conn = joint.conn)
+
+#step 6: visualize linkage using the "drawLinkage" function
+
+# Draw linkage
+?drawLinkage
+drawLinkage(linkage, file='jumping sequence') #default method is an html file saved to the working directory 
+
+#if you change the method to plot the function will print a 2D plot 
+drawLinkage(linkage, method=plot)
+
+#file='YOUR FILE NAME HERE' will save an .html file in your set working directory
+
+#######GRAPHS
+
+#need angular.velocity to be a data frame because ggplot2 doesn't know how to handle data as class matrix
+##facet_grid(Strain~.) wraps into rows based on Strain, where facet_grid(~Strain) wraps into columns 
+###can visually assess the timing of the peaks of the curves (keeping in mind the overall takeoff time is longer in the control mice, and for future studies will be interpolated from 0-100% instead of by time in seconds)
+
+##angular velocity
+#hip
+angular.velocity%>%
+  ggplot(data=.,aes(time,y=Hip_Ang_Vel))+
+  facet_grid(Strain~.)+
+  labs(x="Time (s)", y="Angular velocity of hip (deg/s)")+
+  theme(legend.position = "bottom", legend.direction = "horizontal")+
+  geom_smooth(color="black")+
+  theme_minimal()
+
+#knee
+angular.velocity%>%
+  ggplot(data=.,aes(time,y=Knee_Ang_Vel))+
+  facet_grid(Strain~.)+
+  labs(x="Time (s)", y="Angular velocity of knee (deg/s)")+
+  theme(legend.position = "bottom", legend.direction = "horizontal")+
+  geom_smooth(color="black")+
+  theme_minimal()
+
+#ankle
+angular.velocity%>%
+  ggplot(data=.,aes(time,y=Ankle_Ang_Vel))+
+  facet_grid(Strain~.)+
+  labs(x="Time (s)", y="Angular velocity of ankle (deg/s)")+
+  theme(legend.position = "bottom", legend.direction = "horizontal")+
+  geom_smooth(color="black")+
+  theme_minimal()
+
+## standardized angular velocity graphs 
+#hip
+
+stnd.angular.velocity%>%
+  ggplot(data=.,aes(percent,y=Hip_Ang_Vel))+
+  facet_grid(Strain~.)+
+  labs(x="Percent of jump sequence", y="Angular velocity of hip (deg/s)")+
+  theme(legend.position = "bottom", legend.direction = "horizontal")+
+  geom_smooth(color="black")+
+  theme_minimal()
+  
+#knee
+stnd.angular.velocity%>%
+  ggplot(data=.,aes(percent,y=Knee_Ang_Vel,color=Strain))+
+  labs(x="Percent of jump sequence", y="Angular velocity of Knee (deg/s)")+
+  facet_grid(Strain~.)+
+  theme(legend.position = "bottom", legend.direction = "horizontal")+
+  geom_smooth(colour="black")+
+  theme_minimal()
+
+#Ankle
+stnd.angular.velocity%>%
+  ggplot(data=.,aes(percent,y=Ankle_Ang_Vel))+
+  labs(x="Percent of jump sequence", y="Angular velocity of Ankle (deg/s)")+
+  facet_grid(Strain~.)+
+  theme(legend.position = "bottom", legend.direction = "horizontal")+
+  geom_smooth(colour="black")+
+  theme_minimal()
+
+```
+
+
+
+
+```{r}
+
+```
+

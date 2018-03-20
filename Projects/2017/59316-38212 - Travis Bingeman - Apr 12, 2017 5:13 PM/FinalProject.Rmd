@@ -1,0 +1,321 @@
+---
+title: "Six Frame Translator"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+<Center>
+<B>Travis Bingeman</B><BR>
+<B>R Wizardry Course, Winter 2017</B><BR>
+<B>Lewis Research Group</B><BR>
+<B>University of Calgary</B><BR></CENTER>
+ 
+<BR><BR>
+<B>Background & Use</B><BR>
+
+Proteogenomics is an approach that lies at the interface of proteomics and genomics and can be used to verify and validate genetic models [1]. It can leverage proteomics data to improve genetic annotation in the genome. The standard approach to identifying peptides and proteins from a sample using mass spectrometry is to compare the tandem mass spectra of the sample to a database of possible protein and peptide sequences. One limitation to this approach is the comprehensiveness of the database. Identifications simply cannot be made if the peptide or protein has not been characterized previously in that database[2]. There is a high reliance on <i>in silico</i> annotated proteomes which may contain errors and may be incomplete[2]. In this situation, a proteogenomic approach that relies on a custom genomic database rather than the annotated reference proteome may be necessary to allow novel peptides to map to novel translated regions. One such approach is to employ six frame translation of the genome[2]. While proteomic diversity in eukaryotes is largely a result of alternative mRNA splicing, this approach is more promising in prokaryotes where variables such as exons and introns are less common.<BR>
+
+<B>Details of Six-Frame Translation</B><BR>
+Genetic information is stored in the genome of an organism as a sequence of nucleotides in either deoxyribonucleic acids or ribonucleic acids (DNA or RNA). Three consecutive nucleotides are translated into an amino acid, and this is called a codon. The amino acid encoded is determined by the sequence of nucleotides in the codon (Figure 1). <BR><BR>
+<Center><img src="D:/R Wizardry/codono.png"></Center><BR>
+<B>Figure 1. RNA Codon Table.</B><BR>
+Depicts nucleotide to amino acid translation based on first, second and third nucleotide identity at each of the three positions in the codon. Credit to http://bioinfo.bisr.res.in/cgi-bin/project/crat/theory_codon_restriction.cgi <BR><BR>
+
+Each string of nucleotides has a 5' end characterized by a phosphoryl group and a 3' end characterized by a hydroxyl group. A strand of nucleic acids is read in the 5' -> 3' direction, the nucleotide position from which the read begins determines the open reading frame. There are 3 possible open reading frames in a single strand of nucleotides (Figure 2). Since DNA is double-stranded by nature, a 5' -> 3' strand of DNA will have an implicit antiparallel 3' -> 5' complimentary strand. This complimentary strand also has 3 possible open reading frames to interpret from 5' -> 3'. This gives a total potential 6 frames of translation for a DNA sequence, and 3 frames of translation for a RNA sequence.<BR><BR>
+<Center><img src="D:/R Wizardry/rf.png"></Center><BR>
+
+<B>Figure 2. Reading Frame Illustration </B><BR>
+Each reading frame is delineated by red, blue and green respectively. The first open reading frame, as outlined by blue has a codon  containing "AGG", followed by "TGA", etc. The second open reading frame is outlined by red and includes codons with nucleotides "GGT", "GAC", "ACC", etc. Finally, the third open reading frame depicted on this figure as outlined in green is "GTG", "ACA", "CCG", etc. Credit to Hornung Akos. https://en.wikipedia.org/wiki/Reading_frame <BR><BR>
+There are a few web-based tools that provide the same functionality as this R solution, but obviously for my purposes having something that I can access within the R environment has a great deal of value. For validation, these resources were helpful. Please see http://web.expasy.org/translate/ and http://www.bioline.com/us/media/calculator/01_13.html for reference.<BR>
+
+Package <B>stringi</B> was installed and used to speed up some operations. Unfortunately, including this package triggers a warning because it was built with R version 3.2.5 and I am using R version 3.2.1.<BR>
+```{r}
+#install.packages("stringi")
+library("stringi", lib.loc="~/R/win-library/3.2")
+```
+<BR>
+The <B>setupCodonList()</B> function take a string paramater <B>sStop</B> that can be over-ridden by the user to specify a symbol
+that they would like to represent a stop codon otherwise indicated by an asterix. This function initializes two lists. The first list maps nucleotide codons to the single amino acid code, the second list maps nucleotide codons to the 3 letter amino acid code. These two lists are contained by another list. The inner lists serve as lookup tables for decoding the nucleotides into amino acids.
+
+```{r}
+## function to set up relationship between nucleotide codon and amino acid code, 
+## allows customization of stop codon symbol - serves as programmatic equivalent 
+## to RNA codon table
+setupCodonList <- function(sStop = "*")
+{
+
+  # set up lists to map nucleotide codons to amino acid 3 letter or 1 letter abbreviations
+  
+  cAA3 <-     c("Phe", "Phe", "Leu", "Leu", "Leu", "Leu", "Leu", "Leu", "Ile", "Ile", "Ile", "Met", "Val", 
+                "Val", "Val", "Val", "Ser", "Ser", "Ser", "Ser", "Pro", "Pro", "Pro", "Pro", "Thr", "Thr", 
+                "Thr", "Thr", "Ala", "Ala","Ala", "Ala", "Tyr", "Tyr", "*", "*", "His", "His", "Gln", "Gln", 
+                "Asn", "Asn", "Lys", "Lys", "Asp", "Asp", "Glu", "Glu", "Cys", "Cys", "*", "Trp", "Arg", 
+                "Arg", "Arg", "Arg", "Ser", "Ser", "Arg", "Arg", "Gly", "Gly", "Gly", "Gly")
+  
+  cAA1 <-     c("F", "F", "L", "L", "L", "L", "L", "L", "I", "I", "I", "M", "V", "V", "V", "V", "S", "S", "S", 
+                "S","P", "P", "P", "P", "T", "T", "T", "T", "A", "A", "A", "A", "Y", "Y", "*", "*", "H", "H", 
+                "Q", "Q", "N", "N", "K", "K", "D", "D", "E", "E", "C", "C", "*", "W", "R", "R", "R", "R", "S", 
+                "S", "R", "R", "G", "G", "G", "G")
+  
+  ## check if symbol for stop codon was changed from default
+  ## if changed, see if it is identical to one of existing symbols used for an amino acid and 
+  ## prevent duplication if identical to amino acid symbol, stay with default asterix, 
+  ## otherwise susbsitute requested symbol
+  
+  if (sStop != "*")
+  {
+    count <- (length(which(cAA3 == sStop)) + length(which(cAA1 == sStop)) )
+    if (count == 0) ## symbol not in use, free to use as stop codon symbol
+    {
+      cAA3[which(cAA3 == "*")] <- sStop
+      cAA1[which(cAA1 == "*")] <- sStop
+    }
+  }
+  
+  ## potentential 3 nucleotide codons that encode for amino acids or stop codons
+  vCodons <-  c("UUU", "UUC", "UUA", "UUG", "CUU", "CUC", "CUA", "CUG", "AUU", "AUC", "AUA", "AUG", "GUU", 
+                "GUC", "GUA", "GUG", "UCU", "UCC", "UCA", "UCG", "CCU", "CCC", "CCA", "CCG", "ACU", "ACC", 
+                "ACA", "ACG", "GCU", "GCC", "GCA", "GCG", "UAU", "UAC", "UAA", "UAG", "CAU", "CAC", "CAA", 
+                "CAG", "AAU", "AAC", "AAA", "AAG", "GAU", "GAC", "GAA", "GAG", "UGU", "UGC", "UGA", "UGG", 
+                "CGU", "CGC", "CGA", "CGG", "AGU", "AGC", "AGA", "AGG", "GGU", "GGC", "GGA", "GGG")
+
+  ## pre-allocate memory for lists
+  lAA3Code <- vector(mode="list", length = length(vCodons))
+  lAA1Code <- vector(mode="list", length = length(vCodons))
+  
+  ## name the lists by codon for ease of reference
+  names(lAA3Code) <- vCodons
+  names(lAA1Code) <- vCodons
+  
+  ## initialize each list with 3 letter and 1 letter amino acid code per codon respectively
+  for (i in 1: length(lAA3Code))
+  {
+    lAA3Code[[i]] <- cAA3[[i]]
+    lAA1Code[[i]] <- cAA1[[i]]
+  }
+  ## pre-allocate a 2 member list to contain our 2 member lists
+  lAACodes <- vector(mode="list", length = 2)
+  
+  ## initialize our container list with the 3 letter and 1 letter amino acid lookup lists
+  lAACodes[[1]] <- lAA1Code
+  lAACodes[[2]] <- lAA3Code
+  
+## return the container list of lookup amino acid codes
+return(lAACodes)  
+}
+```
+<BR>
+The <B>translate()</B> function is the main workhorse of this code set. Given a string of
+nucleotides as parameter <B>seq</B> it groups them into segments of 3 to form a sequence of codons. Depending on whether the
+user has requested short output via the <b>bShort</B> parameter or not, the <B>codonTableIndex</B>
+is set to access codonLists for the 1 or 3 letter amino acid code.
+Finally, the code loops through each codon finding the matching amino acid translation and stores
+it in a vector which is finally collapsed into a single contiguous string and returned.<BR>
+```{r}
+translate <- function(seq, bShort)
+{
+  ## splits character string into codons
+  ## i.e. groups characters into groups of 3 and unlists to turn it back into a vector
+  ## using stringi package / function for this for speed purposes
+  codon <- unlist(stri_extract_all_regex(seq, '.{1,3}')) 
+  codonTableIndex <- 0
+  ## pre-allocate memory chunk for character vector to hold results of 
+  ## nucleotide to amino acid translation. 
+  ## without pre-allocation of memory R dynamically re-allocates memory and re-copies existing data
+  ## for each iteration through the loop. Unimportant for short nucleotide strings, but critical
+  ## for 6 frame translation of whole genomes
+  result <- vector(mode="character", length = length(codon))
+  
+  # Choose source of AA code depending on value of bShort parameter
+  if (bShort)
+  {
+    codonTableIndex <- 1  ## index the codon list at the first position for single letter AA code
+  }else
+  {
+    codonTableIndex <- 2  ## index the codon list at the second position for the 3 letter AA code
+  }
+  
+  for (i in 1:length(codon))
+  {
+    result[i] <- lCodonList[[codonTableIndex]][ which(names(lCodonList[[codonTableIndex]]) == codon[i]) ]
+  }
+  ## collapse the string, removing any quotes and return the "result"
+  return(paste(result, sep="", collapse=""))
+}
+```
+<BR>
+The <B>getAASequence()</B> function sets things up for the <B>translate</B> function above.
+It receives a <B> seq</B> parameter which is a sequence of nucleotides for translation, a <B>
+startIndex</B> parameter indicating at which index of the sequence translation should start, 
+and <B> bShort</B>, a flag that indicates whether the 1 letter amino acid code should be returned
+(bShort = TRUE), or the 3 letter amino acid code should be returned (bShort = FALSE).
+First, for simplicity it ensures that all submitted sequences are in RNA form by
+replacing any thymine with uracil and converting all characters to uppercase.
+It then does some basic calculations to determine the first and last indices of the 
+sequence to maximize the number of codons that meet the startIndex and 3 nucleotide codon size criteria.
+
+```{r}
+getAASequence <- function(seq, startIndex, bShort = TRUE)
+{
+  ## convert any incidences of Thymine to Uracil
+  seq <- stri_replace_all_fixed(seq, "T", replacement = "U")
+  ## make sure all characters are in upper case before we get into any loops
+  seq <- toupper(seq)
+  
+  # find maximum number of codons that will fit in sequence with provided start index
+  maxCodons <- floor((nchar(seq) - startIndex + 1)/3)
+  # find end index 
+  endIndex <- (startIndex - 1) + (3 * maxCodons)
+
+  return(translate(substr(seq, startIndex, endIndex), bShort))
+}
+
+```
+<BR>
+The <B>getComplimentaryNTSequence()</B> function generates the complimentary nucleotide
+strand from the sequence passed in through the parameter <B>seq</B>. For simplicity,
+thymine is replaced by uracil and the entire sequence is made uppercase. To make the
+complimentary strand, all "C"s are exchanged with "G"s and "U"s with "A"s and finally
+the order of the sequence is reversed so it can be translated 5' to 3'.<BR>
+
+```{r}
+
+## need to trade nucleotide positions with their compliment
+getComplimentaryNTSequence <- function(seq)
+{
+  ## convert any incidences of Thymine to Uracil
+  sComp <- stri_replace_all_fixed(seq, "T", replacement = "U")
+  sComp <- toupper(sComp)
+  ## track  positions of U with temporary value of "X" (future home of A)
+  sComp <- stri_replace_all_fixed(sComp, "U", replacement = "X")
+
+  ## current position of A can now be replaced with U
+  sComp <- stri_replace_all_fixed(sComp, "A", replacement = "U")  
+
+  ## now that U has replaced A, A can be moved to the former position of U, held by "X"
+   sComp <- stri_replace_all_fixed(sComp, "X", replacement = "A")
+
+  ## repeat for other pairing: track C positions with "X"
+  sComp <- stri_replace_all_fixed(sComp, "C", replacement = "X")   
+
+    ## move C into G's position
+  sComp <- stri_replace_all_fixed(sComp, "G", replacement = "C")  
+
+  ## move G into C's former position being held by "X"
+   sComp <- stri_replace_all_fixed(sComp, "X", replacement = "G")
+
+## now, reverse direction of sequence from 3'->5' to 5' -> 3'
+  
+	seqLen <- nchar(sComp)
+	seqSplit <- strsplit(sComp, split = "")
+	revSeq <- paste(seqSplit[[1]][seqLen:1], collapse = "")
+  return(revSeq)
+}
+
+```
+<BR>
+The <B>loadSeq()</B> function allows a file containing a nucleotide sequence 
+to be read into memory for convenience.<BR> <B> WARNING: I am not validating that 
+your file contains real nucleotide sequences.</B> If you attempt to run random
+input through this translator you will get random results if you get any 
+results at all.<BR>
+
+```{r}
+
+## load a nucleotide sequence from a .txt file
+loadSeq <- function(sFileName)
+{
+  seq <- scan(sFileName, what = "character")
+  return(seq)
+}
+
+```
+<BR>
+The <B>translateSixFrames()</B> function is essentially the main function of the code.
+If the user intends to perform 6-frame translation on a single sequence, this will do 
+most of the necessary work and provides an example of how to use the previous functions.
+The <B>seq</B> parameter is a sequence of nucleotides for translation. The <B>sStopSymbol</B>
+is a user configureable string that can be used to replace the default symbol for a stop codon. 
+The <B>bShortAASymbol</B> parameter is a boolean value that when TRUE indicates that a single 
+letter amino acid code should be returned per translated codon, when FALSE a three letter amino 
+acid code is returned per codon.
+
+```{r}
+
+translateSixFrames <- function(seq, sStopSymbol = "*", bShortAASymbol = TRUE)
+{
+  ##lCodonList is initialized for nucleotide -> amino acid lookup table functionality
+  lCodonList <<- setupCodonList(sStopSymbol)
+  ## generate the complimentary nucleotide sequence for frames 4-6
+  cSeq <- getComplimentaryNTSequence(seq)
+  
+  ## create a list for the translated amino acid sequences
+  lFrames <- vector(mode="list", length = 6)
+  
+  ## loop 3 times, Covering each starting position
+  ##  decode the Coding and Complimentary strand each iteration 
+  for (index in 1:3)
+  {
+    lFrames[[index]] <- getAASequence(seq, index, bShort = bShortAASymbol)
+    lFrames[[index+3]] <- getAASequence(cSeq, index, bShort = bShortAASymbol)
+  }
+  
+  return(lFrames)
+}
+
+```
+<BR>
+The following code snippets provide an example of how to use the previous code.<BR>
+First, I will create a global variable to store the nucleotide codon -> amino acid lookup list: 
+<B>lCodonList</B><BR>
+Next, I will assign a sequence of nucleotides to the variable <B>sSeq</B>
+
+```{r}
+lCodonList <- list()
+sSeq <- "TTTAAAGAGACCGGCGATTCTAGTGAAATCGAACGGGCAGGTCAATTTCCAACCAGCGATGACGTAATAGATAGATACAAGGAAGTCATTTTTCTTTTAAAGGATAGAAACGGTTAATGCTCTTGGGACGGCGCTTTTCTGTGCATAACTCGATGAAGCCCAGCAATTGCGTGTTTCTCCGGCAGGCAAAAGGTTGTCGA"
+```
+
+With my sequence of interest and lCodonList variable initialized, all I need to do is call 
+<B>translateSixFrames()</B> passing my sequence of interest as a parameter. The return value
+is stored in lFrames and can be access by indexing lFrames 1 through 6 depending on which
+frame is of interest.
+
+```{r}
+lFrames <- translateSixFrames(sSeq)
+lFrames[3] ## third frame
+lFrames[6] ## sixth frame
+```
+<BR>
+Alternatively, the stop codon symbol can be specified and the <B>bShortAASymbol</B> parameter can be set to
+FALSE to get 3 letter abbreviations for amino acids.
+```{r}
+lFrames <- translateSixFrames(sSeq, "#", bShortAASymbol = F)
+lFrames[3] ## third frame with "#" symbol for stop codon and 3 letter Amino Acid representation
+```
+<BR>
+For long nucleotide sequences, like an entire genome, it is more convenient to read from a file.
+For this purpose I have included the loadSeq function. An example of how to call it is included
+below, but the path will need to be updated as appropriate. I will include PA01_Full.txt for
+testing purposes. It is the full genome of <i>Pseudomonas aeruginosa</i>. <B>Be warned: since
+the <I>Pa</I> genome is ~6.2 million nucleotides long, 6-frame translation does take some time.</B>
+On my laptop it takes 76 seconds to complete, but your timings may vary. 
+```{r}
+#lCodonList <- list() ## only necessary if not initialized earlier during short sequence example
+#sSeq <- loadSeq("D:/R Wizardry/PA01_Full.txt")  ## download PA01_Full.txt and update path to reflect location of file
+#lFrames <- translateSixFrames(sSeq)
+```
+<BR><BR>
+```{r}
+sessionInfo()
+```
+<BR>
+<B>Bibliography</B><BR><BR>
+<OL>
+<LI>Nesvizhskii AI. Proteogenomics: concepts, applications and computational strategies. Nat. Methods 2014, 11:1114-1125.<BR><BR>
+<LI>Kumar D, Bansal G, Narang A, Basak T, Abbas T, Dash D. Integrating transcriptome and proteome profiling: Strategies and applications. Proteomics 2016, 16:2533-2544.
+</OL><BR><BR>

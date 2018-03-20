@@ -1,0 +1,290 @@
+---
+title: "R-wizardry assignment"
+author: "James Reeve"
+date: '2017-03-09'
+output:
+  html_document: 
+    theme: paper
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+rm(list = ls())
+```
+
+#Background
+In this age of genetics, it is common for people to assume that all traits have a single genetic cause. A few times this is true, for example all colour vision in vertebrates is based on four copies of the same gene (Bowmaker 1998). However, most of the time a single trait is often encoded by many genes that can be scattered throughout the genome (Rockman 2012). The famous example of a complex trait like this, is human hieght, yet we still aren’t sure how many genes are contributing to it (Hirschhorn and Lettre 2009). A major question in genetics is how common complex traits are across all species. To answer this, we need to investigate the genetic basis of complex traits.
+
+The standard way to detect genes that are under selection across the entire genome, is a genome wide association study (GWAS). A GWAS compares genetic sequences from two different populations. These populations are compared site by site along the genome. If the same nucleotide is not shared at a site between populations, it is labelled as a single nucleotide polymorphism (SNP). Once found, the SNPs are then associated with a complex trait, using a $\chi^2$ or Cochran-Armitage trend test (Clarke et al. 2011). This test will produce a list of probabilities that determine if there is a significant association between a SNP and the trait.
+
+There is an issue in using this approach, when multiple statistical tests are performed the probability of an error occurring becomes stronger as the number of tests increases (Storey 2010). For example, if a single hypothesis test has a 0.01 chance of being wrong, then over for 1000 tests 10 are likely to be wrong. As a normal GWAS perform millions of hypotheses tests it is unreliable to use a threshold of 0.05 to determine if p-values are significant. Some methods for overcoming the problem of multiple testing have already been developed by statisticians (Storey and Tibshirani 2003; Benjamini and Hochberg 1995). However, these approaches assume each test is independent to the others, which doesn’t fit genetic data (Clarke et al. 2011). Actual SNPs are not independent as they are linked to their neighbours. By assuming they are independent, many neighbouring SNPs may falsely appear to be under selection. To ensure the SNPs are truly associated to the environment a more stringent method needs to be developed.
+
+This script is designed to produce a method for filtering the results of multiple hypothesis tests, tailored to GWAS datasets. The script uses an example dataset, to find top candidate loci that are likely to be under selection for a complex trait.
+
+#Preparation
+These are the packages and parameters you will need to run this script.
+
+###Packages
+All packages were installed from online repositories using the code after the #.
+
+Two of these packages ("dplyr" and "ggplot2") were downloaded from the CRAN repository. The "q-value" package was downloaded from the biocLite repository. I will explain the "q-value" in more detail in section 2.
+
+```{r, results="hide", message=FALSE}
+#install.packages("ggplot2")
+#install.packages("dplyr")
+library("ggplot2")
+library("dplyr")
+
+#source("https://bioconductor.org/biocLite.R")
+#biocLite("qvalue")
+library("qvalue")
+```
+
+###Parameters
+These are the constant parameters used in this script.
+
+```{r, results="hide"}
+bin_cut<-0.9999  # Binomial distribution cutoff
+window_size <- 1000000 # Length of window (bp)
+thresh<-0.05 # Threshold of significant FDR
+```
+
+#1. dataset
+To determine the top candidate loci, I investigated a dataset taken form two populations of Sunflowers (*Heliocantus annus*). This dataset investigates sunflowers exposed to two treatments (drought-like = stressed and normal = control). The data was kindly provided by Rishi Rajen Masalia at the University of Arizona.
+
+The dataset was generated via the bioinformatics software EMMAX. EMMAX produces post script (.ps) files that contain four columns. The first column contains the chromosome and genetic position (e.g. HA5:10000 =the 10000th nucleotide on the 5th chromosome). The second and third columns contain the effect size (Beta) of the SNP (the difference between both groups) and standard error, respectively. The final column contains the P-values that indicates the strength of association between the genotype and environment. Only the first and final columns are need to locate the top candidate loci.
+
+Both the control and stressed datasets were downloaded with the following code.
+
+```{r, results="hide"}
+setwd("F:/R-Wizardry")
+#This sets the working directory, this will need to be modified to suit your computer
+
+#Control dataset
+SunData_Control<-read.table("Ha412_Jan2017-Control-values-AGBiomass.ps", header = FALSE, col.names = c("Chromosome_position","Beta","SE","P-value"))
+
+#Stressed dataset
+SunData_Stressed<-read.table("Ha412_Jan2017-Stressed-values-AGBiomass.ps", header = FALSE, col.names = c("Chromosome_position","Beta","SE","P-value"))
+
+#Test to see what format the dataset is in
+str(SunData_Control); str(SunData_Stressed)
+```
+
+The chromosome positions are not very helpful in their current format, as they are character vectors. To both sort and use the chromosome position in an equation, the characters need to be converted into numbers. Therefore, I separated the chromosome number and position into two separate columns using two `strsplit` functions (i.e. string split). The first split removes the colon that joins these values. The second split removes the "Ha" from the chromosome number. Both splits are applied across every row of the datasets using the `sapply` function.
+
+Once chromosome number and position are split they are converted to numbers using the `as.numeric` function and then added as two new columns to the dataset. Then the old "Chromosome_position" column is removed. Finally, to stay neat, any temporary values are removed.
+
+```{r, results="hide"}
+#First split; chromosome number and position
+split1 <- strsplit (as.character (SunData_Control[,1]), split = ":", fixed = TRUE)
+
+#Save the split data as two new columns ("Chromosome" and "gene_pos")
+SunData_Control$Chromosome <- sapply (split1,"[[",1)
+SunData_Control$gene_pos <- as.numeric(sapply (split1,"[[",2))
+
+SunData_Stressed$Chromosome <- sapply (split1,"[[",1)
+SunData_Stressed$gene_pos <- as.numeric(sapply (split1,"[[",2))
+
+#Second split; remove the "Ha"
+split2<-strsplit(as.character(SunData_Control[,"Chromosome"]),split = "a",fixed = TRUE)
+
+SunData_Control$Chromosome <- as.numeric(sapply (split2,"[[",2))
+SunData_Stressed$Chromosome <- as.numeric(sapply (split2,"[[",2))
+
+#Removing the old column
+SunData_Stressed$Chromosome_position<-NULL
+SunData_Control$Chromosome_position<-NULL
+
+#Remove temporary values
+rm(split1, split2)
+```
+
+#2. Determining a FDR threshold
+The false discovery rate (FDR) is the probability that a p-value mistakenly shows a significant association between a SNP and the environment. FDRs can be represented as q-values, a measurement akin to a p-value. The complex calculations are automatically made using the "qvalue" package (Storey 2015). The `qvalue` function in this package, gives multiple outputs.We only need the q-values. The unessecary outputs are filtered out using `$qvalues`.
+
+```{r}
+#converting P-values into q-values.
+Q.valueC<-qvalue(SunData_Control$P.value)$qvalues
+Q.valueS<-qvalue(SunData_Stressed$P.value)$qvalues
+```
+
+Now the FDR has been determined I created a new dataset using the `data.frame` function, that we will use to find the top candidate loci.
+
+```{r, results="hide"}
+#Creating a new dataset
+Sun_QvalC<-data.frame(SunData_Control$Chromosome, SunData_Control$gene_pos, Q.valueC, check.rows = TRUE)
+Sun_QvalS<-data.frame(SunData_Stressed$Chromosome, SunData_Stressed$gene_pos, Q.valueS, check.rows = TRUE)
+# The "check.rows" argument ensures all columns are of equal length
+
+#Adding Column names
+Charnames<-c("Chromosome", "gene_pos", "Q.value")
+colnames(Sun_QvalC)<-Charnames
+colnames(Sun_QvalS)<-Charnames
+
+#Checking the data
+str(c(Sun_QvalC,Sun_QvalS)); head(Sun_QvalC); head(Sun_QvalS)
+```
+
+#3. Finding the outliers
+Before we can find the top candidates we must find the significant loci. A loop is used to detect any q-values below an outlier threshold. A loop in programming, takes the same command and does it over and over again, until the last iteration is reached. The iterations used in this loop are chromosomes.
+
+There is also a second loop that is nested within the chrmosome loop. The nested loop divides the chromosome into small sections, known as genomic windows, to make it easier for the computer to calculate the top candidates. Each window was set to be one million nucleotides long, meaning each window contains several SNPs. Within a single window, SNPs with significant q-values are called as outliers. The loop detects these outliers for each window saving the genetic position of the window, the number of SNPs present, the total number of outliers and the expected number of outliers from a binomial distribution. This is repeated for every window on a chromosome.
+
+Outside the nested loop, but within the chromosome loop the results are given column names using the `colnames` function. At the same time NAs are removed and the list of results is converted to a dataset. Finally, the datasets for each chromosome are joined into a single large dataset.
+
+To save on space and allow multiple sets of parameters to be used I created a function, `candidate_assay`, that does this whole process. The parameters used within the function are specified as arguments. This allows both datasets to be run using the same function, and leaves it veristile for use with other EMMAX datasets.
+
+```{r, results="hide"}
+###This is a safety precaution. If i is not saved as a separate value, feel free to ignore this step.
+#rm(i,t)
+
+#Column names
+res_name<-c("Chromosome", "Window_Start", "Window_Length", "Max_Outliers", "Observed_Outliers")
+
+#The "candidate_assay" function:
+
+candidate_assay<-function(data, window_size, bin_cut, Omean, threshold){
+#Loop by chromosome
+  Res<-list()
+for (i in 1:length(unique(data[,"Chromosome"])))
+  {
+   sub1<- data[data[ ,"Chromosome"] == i, ]
+   windnum <- max(sub1[,"gene_pos"]) / window_size #number of windows in chromosome
+   
+   results<- array(NA,c(max(data[ ,"gene_pos"]) / window_size, 5))
+#loop by window
+   for(t in 1:windnum)
+   {
+     windmax <- t*window_size # calaculate the boundries of the window (bp)
+     windmin <- windmax-window_size + 1
+     sub2 <- sub1[sub1[ ,"gene_pos"] < windmax & sub1[ ,"gene_pos"] >= windmin, ]
+    SNP_in_window <- nrow (sub2) #finds number of SNPs in a window
+    
+  results[t,1] <-i # chromosome number
+  results[t,2] <-windmin # window start position (bp) 
+  results[t,3] <-SNP_in_window # Number of SNPs
+  results[t,4] <-qbinom (bin_cut, SNP_in_window, Omean) # the highest 0.9999 quantile of p-values 
+  results[t,5] <-sum (sub2[,"Q.value"] < threshold) # the number of outliers above the threshold
+   }
+   colnames(results)<-res_name
+   Res[[i]]<- results
+}
+Res<-lapply(Res,na.omit) # Removing rows with NAs
+Res<-lapply(Res,as.data.frame) # Converting to a data.frame
+Res<-do.call(rbind.data.frame, Res) # Merging "Res" into a single data frame
+}
+
+# Diffining the mean number of outliers
+OmeanC<-sum(Sun_QvalC$Q.value < thresh) / nrow (Sun_QvalC)
+OmeanS<-sum(Sun_QvalS$Q.value < thresh) / nrow (Sun_QvalS)
+
+#Running the "candidate_assay" function
+resultsC<-candidate_assay(data=Sun_QvalC, window_size, bin_cut, Omean = OmeanC, threshold = thresh)
+
+resultsS<-candidate_assay(data=Sun_QvalS, window_size, bin_cut, Omean = OmeanS, threshold = thresh)
+```
+
+###Saving the data
+Both datasets are saved as a commer seperate value (csv) file in R using the `write.csv` function. This function produces a column of row numbers by default, which is a nuisance to remove every time the data is run. This can be avoided by setting the argument `row.names = FALSE`.
+
+```{r, results="hide"}
+getwd() #Checking where the data will be saved
+
+# Control data
+write.csv(resultsC, "Sunflower_Outliers_FDR_C.csv", row.names=FALSE)
+
+#Stressed data
+write.csv(resultsS, "Sunflower_Outliers_FDR_S.csv", row.names=FALSE)
+```
+
+#4. Outlier Plot
+To find the top candidate among outliers, the number of outlier in each window is compared to its predicted binomially distributed number. Any windows that have more outliers than predicted, contains a top candidate. The easiest way to approach this analysis is graphically.
+
+To visualise the top candidates compared to the other SNPs, each window is graphed on a scatter plot. The x-axis of this plot ranks the windows by the number of SNPs they contain, while the Y-axis ranks the number of outlier SNPs that had a significantly low FDR. A binomially distributed line is added to this plot. Any windows above the line are considered to contain a top candidate.
+
+The values needed to create this plot are already present in the results dataset. The number of SNPs in a window is the column "Window_Length", and the number of outlier SNPs is the column "Observed_Outliers". 
+
+The data is plotted using the `ggplot` function from the ggplot2 package. `ggplot` is helpful as you only need to specify which dataset you are using once. The aesthetic arguments (`aes`) are then used to specify the values on the axes. Further arguments can be used to add colour and lines to the plot. Of particular note is the `ylim` argument which is used to limit the y-axis for both graphs to keep them consistent. However, this cuts a single window out of the stressed dataset.
+
+The binomial distribution of the results is calculated using the `qbinom` function, before being added to the plot. This is done outside of the plotting function to save space. This produces a vector of the predicted number of outliers expected given the size, for each x-axis value. These values are then plotted as a line on top of the plot.
+
+```{r}
+#Binomial distribution quantiles
+qbinom.C <- qbinom (bin_cut,1:nrow(resultsC),OmeanC)
+qbinom.S <- qbinom (bin_cut,1:nrow(resultsS),OmeanS)
+
+# Control
+ggplot(data = resultsC, aes(x = Window_Length, y = Observed_Outliers))+
+  geom_point(colour = "navy")+
+  geom_line(aes(x = sort(Window_Length), y = qbinom.C), colour = "firebrick2")+
+  ylim(0,20)+
+  theme_bw()+
+  labs(title = "Control",x = "SNPs in Window", y = "Outliers in Window")
+  
+
+# Stressed
+ggplot(data = resultsS, aes(x = Window_Length, y = Observed_Outliers))+
+  geom_point(colour = "navy")+
+  geom_line(aes(x = sort(Window_Length), y = qbinom.S), colour = "firebrick2")+
+  ylim(0,20)+
+  theme_bw()+
+  labs(title = "Stressed",x = "SNPs in Window", y = "Outliers in Window")
+  
+```
+
+#Interpretation and Conclusion
+Both figures show a few windows with outliers above the binomial distribution (red line). These windows contain the top candidate SNPs. Knowing that top candidates are present tells us nothing about where they are located, or how many SNPs are there. The next step is to locate their position on the chromosome and to determine whether they are a single SNP or several linked sites on the same window.
+
+It is easy to locate the position of the top candidates by finding what window the candidate is on. The start position for every window was saved in the results dataset. Using the start position, the entire window is plotted to determine where the SNP is located. As an example, I have used a window in the stressed dataset that has around 18 outliers. The figure produced shows that the candidate is a dense cluster of SNPs that are around 37.46mB down the 14th Chromosome.
+
+```{r}
+# Finding the window
+Test_Window<- resultsS[resultsS$Observed_Outliers==max(resultsS$Observed_Outliers),]
+WGP<-Test_Window$Window_Start #[W]indow [G]ene [P]osition
+WCh<-Test_Window$Chromosome #[W]indow [Ch]romosome
+
+# Plotting the Window
+ggplot(data = Sun_QvalS%>%
+         filter(Chromosome == WCh & 
+                  gene_pos >= WGP & gene_pos < WGP + window_size),
+       aes(gene_pos/window_size, log10(Q.value)))+
+  geom_point()+
+  geom_hline(yintercept = log10(thresh), col = "firebrick2")+
+  ylim(0,-1.5)+ #putting 0 first inverts the y axis
+  theme_bw()+
+  labs(x = "Geneome postions (mB)", y = expression("Log"[10]*"(q-value)"), title = paste("Chromosome 14; Window", round(WGP/window_size)))
+```
+
+Observing the data in the window you will notice two clusters. These SNPs form a peak which may be a single gene or several. It is hard to differentiate the SNPs into genes that are side by side on the genome. This will require a probabilistic model to determine how many SNPs are on average located in a gene. This falls beyond the scope of what we are investigating here.
+
+This script was designed to filter a series of p-values showing the association between genotype and environment, into several top candidate loci which are under selection. We can further refine this down to the genetic variations that cause adaptation. By comparing these sites between sunflowers in drought and normal conditions, we can see which genes are responsible for drought adaptation. Using this same approach on other datasets can help to detect the number and location of genes used by many species for local adaptation.
+
+# References
+```{r, echo=FALSE}
+# Details about this code:
+sessionInfo()
+```
+
+### Packages
+```{r, echo=FALSE}
+# Packages used:
+citation("ggplot2")
+citation("dplyr")
+citation("qvalue")
+```
+
+### Papers
+Benjamini Y. and Hochberg Y. 1995. Controlling the false discovery rate: a practical and powerful approach to multiple testing. Journal of the Royal Statistical Society Series B (Methodological) 57(1): 289-300.
+
+Bowmaker J.K. 1998. Evolution of colour vision in vertabrates. Eye 12:541-547.
+
+Clarke G.M., Anderson C.A., Petterson F.H., Cardon L.R, Morris A.P. and Zondervan K.T. 2011. Basic statistical analysis in genetic case-control studies. Nature Protocols 6(2): 121-133.
+
+Hirschhorn J.N, and Lettre G. 2009. Progress in genome-wide association studies of human height.Hormone Research 71(2):5-13.
+
+Rockman M.V. 2012. The QTN program and the alleles that matter for evolution: All that's gold does not glitter. Evolution 66(1): 1-17.
+
+Storey J.D. 2010. False discovery rates. International Encyclopedia of Statistical Science. Princeton University Press, Princeton, New Jersey, USA. p.504-508.
+
+Storey J.D. and Tibshirani R. 2003. Statistical significance for genomewide studies. Proceedings of the National Academy of Sciences USA 100(16): 9440-9445.

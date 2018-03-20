@@ -1,0 +1,259 @@
+---
+title: "Final Project - RWizardry W2017"
+author: "Joseph Utomo - Ro Lab"
+date:
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## This part of code is for making the artificial data, which also can be used for storing the real data.
+
+```{r}
+# Number of mutation
+nummut <- seq (from = 1, to = 23, by = 1)
+# Matrix to randomize the number of mutation
+results <- matrix (NA, ncol = 6, nrow = 100)
+set.seed (1)
+for (i in 1:length (results[,1])){
+  results [i,1] <- sample (nummut, size = 1, replace = T)
+}
+
+## Products of each samples
+moncyc <- seq (from = 0.8, to = 1, by = 0.001)
+linear <- seq (from = 0, to = 0.2, by = 0.001)
+bicyc <- seq (from = 0, to = 0.1, by = 0.001)
+amorpha <- seq (from = 0, to = 1, by = 0.01)
+### Loop for making sure the total product fraction is 1
+for (i in 1: length (results [,1])){
+  results [i,2] <- sample (moncyc, size = 1, replace = T)
+  if (results [i,2] > 0.95){
+    results [i,3] <- 1 - results [i,2]
+    results [i,4:6] <- 0
+  } else {
+  results [i,3] <- sample (linear, size = 1, replace = T)
+  results [i,4] <- sample (bicyc, size = 1, replace = T)
+  if (1- results [i,2] - results [i,3] <= 0) {
+    results [i,3] <- 1 - results [i,2]
+    results [i,4:6] <- 0
+  }
+  if (1 - results [i,2] - results [i,3] - results [i,4] <= 0 ){
+  results [i,4] <- 1 - results [i,2] - results [i,3]
+  results [i,5] <- 0
+  results [i,6] <- (sample (amorpha, size = 1, replace = T))*results [i,4]
+  } else {
+    results [i,5] <- 1 - results [i,2] - results [i,3] - results [i,4]
+    results [i,6] <- (sample (amorpha, size = 1, replace = T))*results [i,4]
+  }
+  if (results [i,4] < 0){
+    results [i,4:6] <- 0
+  }
+  }
+}
+
+# Check if the total products are greater or less than 1
+a <- 1- results [,2] - results [,3] - results [,4] - results [,5]
+print (a)
+
+# From amounts of mutation --> generate the mutation for protein sequence
+residues <- c (292, 295, 399, 518, 288, 291, 294, 392, 396, 447, 450, 261, 274, 289, 373, 381, 395, 397, 398, 435, 446, 461, 512)
+
+
+# Making results matrix as data frame so it can contain different type of data
+resultsframe <- as.data.frame(results)
+colnames (resultsframe) <- c("Num_Mut","Monocylic_percent", "Linear_percent", "Bicyclic_percent", "Multicyclic_percent","Amorphadiene")
+# Matrix for storing the information of target residues
+resmut <- matrix(NA, ncol = 2, nrow = 23)
+colnames (resmut) <- c("residues", "In AaADS")
+resmut [,1] <- residues
+resmut [,2] <- c ("V", "I", "T", "Q", "F", "A", "V", "H", "V", "T", "A", "L", "G", "T", "N", "A", "V", "I", "I", "S", "M", "L", "C")
+
+# List for asking R to sample specific amount of specific residues (based on amount of mutation)
+doc <- list ()
+for (i in 1:length (resultsframe$Num_Mut)){
+  parking <- sample (residues, size = results [i,1])
+  doc [[length(doc)+1]] <- parking
+}
+
+doc
+
+# Make the mutation sequence
+AaBBS <- "MSLTEEKPIRPIANFSPSIWGDQFLIYDNQVEQGVEQIVKDLKKEVRQLLKEALDIPMKHANLLKLVDEIQRLGISYLFEQEIDHALQHIYETYGDNWSGDRSSLWFRLMRKQGYFVTCDVFNNHKDESGVFKQSLKNHVEGLLELYEATSMRVPGEIILEDALVFTQSHLSIIAKDTLSINPALSTEIQRALKKPLWKRLPRIEAVQYIPFYEQQDSHNKTLIKLAKLEFNLLQSLHREELSQLSKWWKAFDVKNNAPYSRDRIVECYFWALASRFEPQYSRARIFLAKVIALVTLIDDIYDAYGTYEELKIFTEAIERWSITCLDMIPEYMKPIYKLFMDTYTEMEEILAKEGKTNIFNCGKEFVKDFVRVLMVEAQWLNEGHIPTTEELDSIAVNLGGANLLTTTCYLGMSDIVTKEAFEWAVSEPPLLRYKGILGRRLNDLAGHKEEQERKHVSSSVESYMKEYNVSEEYAKNLLYKQVEDLWKDINREYLITKTIPRPLLVAVINLVHFLDVLYAEKDNFTRMGEEYKNLVKSLLVYPMSI"
+mutres <- matrix(NA, nrow = length(resultsframe$Num_Mut), ncol = 546)
+for (i in 1:length(mutres[,1])){
+  mutres [i,] <- strsplit(AaBBS, "")[[1]]
+}
+
+
+for (i in 1:length(resultsframe$Num_Mut)){
+  z <- unlist (doc[i])
+  y <- resultsframe [i,1]
+  for (j in 1:y){
+    mutres [i, z[j]] <- subset (resmut, resmut [,1] == z[j], select = 2)
+  }
+}
+
+#### Just for Checking ########
+doc [1]
+doc [100]
+
+mutres [1, 294] 
+mutres [100, 294]
+###############################
+
+## Paste the sequence together
+seqmut <- matrix (NA, nrow = length (results[,1]), ncol = 1)
+
+for (i in 1:length(results[,1])){
+  seqmut [i,] <-paste (mutres [i,], collapse = "")
+}
+
+unique (seqmut)
+
+## Final Artifical Data Results
+docresult <- cbind(resultsframe, seqmut)
+sampleid <- as.data.frame (matrix (NA, ncol = 1, nrow = length (results [,1])))
+for (i in 1:length(sampleid[,1])){
+  sampleid [i,1] <- paste ("MutBBS", i, sep = "_")
+}
+colnames (sampleid) <- "Sample_ID"
+finresult <- cbind (sampleid, docresult[,2:7])
+
+```
+
+# This part of code is used after the data gathered
+
+```{r}
+
+## Find Mutation number from the sequence in the artificial data
+library (dplyr)
+mutation <- finresult %>% select (Sample_ID, seqmut)
+colnames (mutation) <- c("Sample_ID","Protein_Sequence")
+mutation$Protein_Sequence <- as.character(mutation$Protein_Sequence)
+str (mutation)
+
+## Make a matrix containing split AaBBS (Background) and AaADS
+AaBBS <- "MSLTEEKPIRPIANFSPSIWGDQFLIYDNQVEQGVEQIVKDLKKEVRQLLKEALDIPMKHANLLKLVDEIQRLGISYLFEQEIDHALQHIYETYGDNWSGDRSSLWFRLMRKQGYFVTCDVFNNHKDESGVFKQSLKNHVEGLLELYEATSMRVPGEIILEDALVFTQSHLSIIAKDTLSINPALSTEIQRALKKPLWKRLPRIEAVQYIPFYEQQDSHNKTLIKLAKLEFNLLQSLHREELSQLSKWWKAFDVKNNAPYSRDRIVECYFWALASRFEPQYSRARIFLAKVIALVTLIDDIYDAYGTYEELKIFTEAIERWSITCLDMIPEYMKPIYKLFMDTYTEMEEILAKEGKTNIFNCGKEFVKDFVRVLMVEAQWLNEGHIPTTEELDSIAVNLGGANLLTTTCYLGMSDIVTKEAFEWAVSEPPLLRYKGILGRRLNDLAGHKEEQERKHVSSSVESYMKEYNVSEEYAKNLLYKQVEDLWKDINREYLITKTIPRPLLVAVINLVHFLDVLYAEKDNFTRMGEEYKNLVKSLLVYPMSI"
+
+targetres <- matrix (NA, ncol = 546, nrow = 1)
+targetres [1,] <- strsplit(AaBBS, "")[[1]]
+
+## Make a matrix and splitting the residue
+splitres <- matrix (NA, ncol = 546, nrow = length(mutation[,1]))
+for (i in 1:length(mutation [,1])){
+  splitres [i,] <- strsplit(mutation[i,2], "")[[1]]
+}
+
+## Identify the mutated residues and amount of mutation by comparing with AaBBS
+diffres <- matrix (NA, ncol = 546, nrow = length(splitres [,1]))
+for (i in 1:length (splitres [,1])){
+  diffres [i,] <- splitres [i,] == targetres [1, ]
+}
+
+numbermut <- as.data.frame(matrix (NA, ncol = 3, nrow = length(splitres [,1])))
+for (i in 1:length (splitres [,1])){
+  numbermut [i,2] <- sum (diffres [i,] == FALSE)
+  numbermut [i,1] <- mutation [i,1]
+  numbermut [i,3] <- finresult [i,6]
+}
+colnames (numbermut) <- c("Sample_ID","Total_mutation","Amorpha_percent")
+
+ADSprod <- matrix (NA, ncol = 2, nrow = length (splitres [,1]))
+for (i in 1:length (splitres [,1])){
+  ADSprod [i,1] <- mutation [i,1]
+  ADSprod [i,2] <- finresult [i,6] > 0
+}
+
+adiene <- cbind(ADSprod,diffres)
+
+## Make compilation of amount of mutant residues
+residues <- c (292, 295, 399, 518, 288, 291, 294, 392, 396, 447, 450, 261, 274, 289, 373, 381, 395, 397, 398, 435, 446, 461, 512)
+# Compile the positive samples
+pos_mutant <- as.data.frame(matrix(NA, nrow = sum (numbermut [,3] > 0),ncol = 26))
+pos_mutant [,1] <- c(subset (numbermut[,1], numbermut [,3]>0))
+for (i in 1:length(pos_mutant[,1])){
+  pos_mutant[i,2] <- subset(numbermut[,2],numbermut[,1] == pos_mutant[i,1])
+  pos_mutant[i,3] <- subset(numbermut[,3],numbermut[,1] == pos_mutant[i,1])
+  pos_mutant[i,4:26] <- subset(adiene [,residues+2],adiene[,1] == pos_mutant[i,1])
+}
+colnames(pos_mutant) <- c("Sample_ID","Total_mutation","Amorphadiene_percent",residues)
+
+mutant_effect <- as.data.frame (matrix (NA, ncol = 2, nrow = 23))
+mutant_effect [,1] <- residues
+for (i in 1:length(mutant_effect[,1])){
+  mutant_effect [i,2] <- min(subset(pos_mutant[,2],pos_mutant[,i+3] == FALSE))
+  # +3 only indicates to take the proper residue, because the matrix contain another data
+}
+colnames (mutant_effect) <- c("Residues", "Min_mutation")
+mutant_effect$Residues <- as.factor(mutant_effect$Residues) #because the residues are factor rather than number or integer
+
+
+## Plotting the data
+library (ggplot2)
+library (RColorBrewer)
+
+opt.theme <- function (main.face = "bold", axis.face = "bold"){
+  theme(plot.title = element_text(hjust = 0.5, family ="sans", color = "black", face = main.face, size = 25)) +
+    theme(axis.title.x = element_text(family = "sans", color = "black", face = axis.face, size = 15),
+          axis.title.y = element_text(family = "sans", color = "black", face = axis.face, size = 15),
+          axis.text.x = element_text (colour = 'black', size = 10, family = 'sans'),
+          axis.text.y = element_text (colour = 'black', size = 10, family = 'sans'))
+}
+
+# Plot the effect of Total Mutation with Amorphadiene production
+ggplot (pos_mutant,aes(x = Total_mutation, y = Amorphadiene_percent)) +
+  geom_point (aes(color = Total_mutation), size = 5)+
+  scale_color_gradient2(low = "yellow", high = "red", mid = "orange", midpoint = 8, name = "Total Mutation")+
+  scale_x_discrete ("Number of Mutation") +
+  scale_y_continuous ("Amorphadiene Produced (%)")+
+  ggtitle("Effect of Total Mutation to Amorphadiene Production")+
+  opt.theme()
+
+# For plotting minimal mutated residues needed for producing amorphadiene
+ggplot (mutant_effect, aes(x = Residues, y = Min_mutation, fill = Residues, label = Min_mutation, show_guide = FALSE))+
+  geom_bar(stat = "identity") +
+  theme_bw ()+
+  scale_fill_discrete (h = c(10,250), c = 100, l = 30, guide = FALSE)+
+  scale_x_discrete ("Residues") +
+  scale_y_continuous ("Minimum Residues",limits = c(0,10))+
+  theme (legend.position = "bottom")+
+  ggtitle("Minimum Mutation for each Residues\nto Produce Amorphadiene")+
+  geom_text(size = 4, vjust = -0.5)+
+  opt.theme()
+
+## From the result -->  399 and 518 is the key residues, search for relationship
+## See the combination of each residues with Residue 289 and 399
+crit.residues <- mutant_effect [which(mutant_effect$Min_mutation == 1),1]
+relationship <- as.data.frame(matrix(NA,ncol = 5, nrow = 46))
+relationship [,1] <- as.factor(rep(crit.residues))
+relationship [,1] <- sort(relationship[,1])
+relationship [,2] <- as.factor(rep(residues))
+ for (i in 1:length(relationship[,1])){
+  relationship [i,3] <- sum(adiene[,as.numeric(as.character(relationship [i,1]))+2] == FALSE & adiene[,as.numeric(as.character(relationship [i,2]))+2] == FALSE)
+  relationship [i,4] <- sum(adiene[,as.numeric(as.character(relationship [i,1]))+2] == FALSE & adiene[,as.numeric(as.character(relationship [i,2]))+2] == FALSE & adiene[,2]== TRUE)
+  relationship [i,5] <- sum(adiene[,as.numeric(as.character(relationship [i,1]))+2] == FALSE & adiene[,as.numeric(as.character(relationship [i,2]))+2] == FALSE & adiene[,2]== FALSE)
+  if (relationship [i,1] == relationship [i,2]){
+    relationship [i,] <- NA
+  }
+}
+colnames(relationship) <- c("Critical_residues","Associated_residues","Total_combination","Combination_produce_ADS", "Combination_no_ADS")
+relationship <- na.omit(relationship)# For deleting the relationship data between the key residues (399 or 518) with itself.
+
+# Plotting the relationship between the key residues with other residues
+ggplot(relationship, aes(x = Combination_no_ADS, y = Combination_produce_ADS, size = Total_combination, label = Associated_residues,color = Associated_residues))+
+  geom_jitter () +
+  facet_wrap(~ Critical_residues)+
+  scale_x_continuous ("#Combination without ADS Produced") +
+  scale_y_continuous ("#Combination resulting ADS Produced")+
+  theme (legend.position = "bottom", strip.text.x = element_text(size = 12, face = "bold"))+
+  guides(color = FALSE)+
+  scale_size_continuous(name = "Total Combination")+
+  ggtitle(paste("Relation between Residues 399 and 518 with Other Residues"))+
+  geom_text(size = 3, vjust = -0.5, color = "black")+
+  opt.theme()
+## Last thing
+sessionInfo()
+```
+
